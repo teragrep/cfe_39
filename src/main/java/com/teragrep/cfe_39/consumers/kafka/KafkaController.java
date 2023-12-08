@@ -41,8 +41,14 @@ public class KafkaController {
     // The message is then processed performing the required business logic. Upon completion the transaction is committed.
 
     // TODO requirements:
-    // 1. The KafkaReader-class must be able to pass the offset values to the main class that is calling KafkaReader.
-    // 2. The main class must handle the consuming of the kafka topics in an idempotent way as stated above. This is achieved by using the HDFS filenames to store the topic_name and offset values of Kafka topics.
+
+    // 1. The KafkaReader-class must be able to pass the offset values alongside the consumed message to the main class that is calling KafkaReader.
+
+    // 2. The main class must handle the consuming of the kafka topics in an idempotent way as stated above.
+    // This is achieved by using the HDFS filenames to store the topic_name and offset values of Kafka topics.
+    // In other words Kafka consumers will consume topics normally according to the offsets that Kafka stores internally,
+    // but the processor of the consumed messages will check the offsets of the messages that are consumed by kafka and
+    // processes ONLY those messages that have not already been processed based on the offset values stored in HDFS filenames.
 
     private static final Logger LOGGER = LoggerFactory.getLogger(KafkaController.class);
 
@@ -88,7 +94,9 @@ public class KafkaController {
     private void createReader(String topic, List<TopicCounter> topicCounters) throws SQLException {
         TopicCounter topicCounter = new TopicCounter(topic);
         topicCounters.add(topicCounter);
-
+        // DatabaseOutput handles transferring the consumed data to storage (S3, mariadb, HDFS, etc.)
+        // Kafka offset tracking must be included here.
+        // Topic is figured out in topicScan and the offsets for the topic should be figured out here.
         Consumer<List<byte[]>> output = new DatabaseOutput(
                 config,
                 topic,
@@ -108,7 +116,7 @@ public class KafkaController {
          */
 
         // The kafka offsets must be passed to HDFS. The consumer must also be set to manual commits so the HDFS can handle managing the commit offsets within the HDFS filenames.
-        // Instead of ReadCoordinator the KafkaReader must be used, as the coordinator won't give access to offsets.
+        // plain rlo_09.ReadCoordinator won't give access to offset values. Implementing custom rlo_09 code in the package to achieve offset access.
         ReadCoordinatorTemp readCoordinator = new ReadCoordinatorTemp(
                 topic,
                 config.getKafkaConsumerProperties(),

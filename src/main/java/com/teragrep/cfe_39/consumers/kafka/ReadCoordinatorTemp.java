@@ -17,6 +17,7 @@ public class ReadCoordinatorTemp implements Runnable {
     private final Properties readerKafkaProperties;
     private final Consumer<List<byte[]>> callbackFunction;
     private boolean run = true;
+    private long offset;
 
     public ReadCoordinatorTemp(
             String queueTopic,

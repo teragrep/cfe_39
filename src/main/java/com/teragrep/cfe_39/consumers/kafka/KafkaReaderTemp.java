@@ -48,6 +48,7 @@ public class KafkaReaderTemp implements AutoCloseable {
         if (!recordsList.isEmpty()) {
             callbackFunction.accept(recordsList);
             kafkaConsumer.commitSync();
+
             /*
             commitSync():
             It only commits the offsets that were actually polled and processed. If some offsets were not included in the last poll, then those offsets will not be committed.
