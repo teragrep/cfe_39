@@ -18,9 +18,9 @@ import java.util.function.Consumer;
 // TODO:
 //  Alter the class so the output is not SQL (aka. mariadb).
 //  Instead the kafka stream should first be deserialized using rlo_06 and then serialized using avro and stored in HDFS.
-//  The kafka offsets must be passed to HDFS too.
+//  The target where the record is stored in HDFS is based on the topic, partition and offset. ie. topic_name/0.123456 where offset is 123456
 
-public class DatabaseOutput implements Consumer<List<byte[]>> {
+public class DatabaseOutput implements Consumer<List<RecordOffsetObject>> {
     private static final Logger LOGGER = LoggerFactory.getLogger(DatabaseOutput.class);
     private final RFC5424Frame rfc5424Frame = new RFC5424Frame(false);
 
@@ -54,14 +54,15 @@ public class DatabaseOutput implements Consumer<List<byte[]>> {
     }
 
     @Override
-    public void accept(List<byte[]> bytes) {
+    public void accept(List<RecordOffsetObject> recordOffsetObjectList) {
         long thisTime = Instant.now().toEpochMilli();
         long ftook = thisTime - lastTimeCalled;
         topicCounter.setKafkaLatency(ftook);
-        LOGGER.debug(ANSI_BLUE + "Fuura searching your batch for <[" + table + "]> with records <" + bytes.size() + "> and took  <" + (ftook) + "> milliseconds. <" + (bytes.size() * 1000L / ftook) + "> EPS. " + ANSI_RESET);
+        LOGGER.debug(ANSI_BLUE + "Fuura searching your batch for <[" + table + "]> with records <" + recordOffsetObjectList.size() + "> and took  <" + (ftook) + "> milliseconds. <" + (recordOffsetObjectList.size() * 1000L / ftook) + "> EPS. " + ANSI_RESET);
         long batchBytes = 0L;
 
-        for (byte[] byteArray : bytes) {
+        for (RecordOffsetObject recordOffsetObject : recordOffsetObjectList) {
+            byte[] byteArray = recordOffsetObject.record;
             batchBytes = batchBytes + byteArray.length;
             InputStream inputStream = new ByteArrayInputStream(byteArray);
             rfc5424Frame.load(inputStream);
@@ -90,22 +91,22 @@ public class DatabaseOutput implements Consumer<List<byte[]>> {
         if (took == 0) {
             took = 1;
         }
-        long rps = bytes.size() * 1000L / took;
+        long rps = recordOffsetObjectList.size() * 1000L / took;
         topicCounter.setRecordsPerSecond(rps);
 
         long bps = batchBytes * 1000 / took;
         topicCounter.setBytesPerSecond(bps);
 
-        runtimeStatistics.addAndGetRecords(bytes.size());
+        runtimeStatistics.addAndGetRecords(recordOffsetObjectList.size());
         runtimeStatistics.addAndGetBytes(batchBytes);
 
         topicCounter.addToTotalBytes(batchBytes);
-        topicCounter.addToTotalRecords(bytes.size());
+        topicCounter.addToTotalRecords(recordOffsetObjectList.size());
 
         LOGGER.debug(
                 ANSI_GREEN
                         + "Sent batch for <[" + table + "]> "
-                        + "with records <" + bytes.size() + "> "
+                        + "with records <" + recordOffsetObjectList.size() + "> "
                         + "and size <" + batchBytes / 1024 + "> KB "
                         + "took <" + (took) + "> milliseconds. "
                         + "<" + rps + "> RPS. "

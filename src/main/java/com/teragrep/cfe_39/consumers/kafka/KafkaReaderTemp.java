@@ -6,10 +6,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Iterator;
-import java.util.List;
+import java.util.*;
 
 public class KafkaReaderTemp implements AutoCloseable {
     final Logger LOGGER = LoggerFactory.getLogger(KafkaReaderTemp.class);
@@ -18,10 +15,10 @@ public class KafkaReaderTemp implements AutoCloseable {
 
     private final Consumer<byte[], byte[]> kafkaConsumer;
 
-    private final java.util.function.Consumer<List<byte[]>> callbackFunction;
+    private final java.util.function.Consumer<List<RecordOffsetObject>> callbackFunction;
 
     public KafkaReaderTemp(
-            Consumer<byte[], byte[]> kafkaConsumer, java.util.function.Consumer<List<byte[]>> callbackFunction) {
+            Consumer<byte[], byte[]> kafkaConsumer, java.util.function.Consumer<List<RecordOffsetObject>> callbackFunction) {
         this.kafkaConsumer = kafkaConsumer;
         this.callbackFunction = callbackFunction;
     }
@@ -37,17 +34,24 @@ public class KafkaReaderTemp implements AutoCloseable {
             kafkaRecordsIterator = kafkaRecords.iterator();
         }
 
-        List<byte[]> recordsList = new ArrayList<>();
+        List<RecordOffsetObject> recordOffsetObjectList = new ArrayList<>();
         while (kafkaRecordsIterator.hasNext()) {
             ConsumerRecord<byte[], byte[]> record = kafkaRecordsIterator.next();
-            offset = record.offset(); // offset for HDFS filenames
-            LOGGER.debug("adding from offset: " + record.offset()); // TODO: The offsets must be passed outside the class, to the main class that is calling this class.
-            recordsList.add(record.value());
+            LOGGER.debug("adding from offset: " + record.offset());
+            // Do filtering here.
+            boolean checkStuff = checkIfProcessed(record.topic(), record.partition(), record.offset()); // TODO: Create checkIfProcessed method. Checks if the record has already been processed and stored in HDFS.
+            if (!checkStuff) {
+                recordOffsetObjectList.add(new RecordOffsetObject(record.topic(), record.partition(), record.offset(), record.value()));
+            }else{
+                // TODO: The consumer should update its offsets to effectively mark the message as consumed to ensure it is not redelivered, and no further action takes place.
+            }
         }
 
-        if (!recordsList.isEmpty()) {
-            callbackFunction.accept(recordsList);
-            kafkaConsumer.commitSync();
+        if (!recordOffsetObjectList.isEmpty()) {
+            // This is the DatabaseOutput.accept() function. This is where the idempotent consumer pattern should be implemented.
+            // Offset and other required data for HDFS storage are added to the input parameters of the accept() function which processes the consumed record.
+            callbackFunction.accept(recordOffsetObjectList);
+            kafkaConsumer.commitSync(); // FIXME: Should the commitSync() be moved outside of the if-brackets so the consumer could skip the already processed records properly?
 
             /*
             commitSync():

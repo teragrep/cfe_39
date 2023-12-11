@@ -15,14 +15,14 @@ public class ReadCoordinatorTemp implements Runnable {
 
     private final String queueTopic;
     private final Properties readerKafkaProperties;
-    private final Consumer<List<byte[]>> callbackFunction;
+    private final Consumer<List<RecordOffsetObject>> callbackFunction;
     private boolean run = true;
     private long offset;
 
     public ReadCoordinatorTemp(
             String queueTopic,
             Properties readerKafkaProperties,
-            Consumer<List<byte[]>> callbackFunction)
+            Consumer<List<RecordOffsetObject>> callbackFunction)
     {
         this.queueTopic = queueTopic;
         this.readerKafkaProperties = readerKafkaProperties;
@@ -31,7 +31,7 @@ public class ReadCoordinatorTemp implements Runnable {
 
     private KafkaReaderTemp createKafkaReader(Properties readerKafkaProperties,
                                           String topic,
-                                          Consumer<List<byte[]>> callbackFunction,
+                                          Consumer<List<RecordOffsetObject>> callbackFunction,
                                           boolean useMockKafkaConsumer) {
 
         org.apache.kafka.clients.consumer.Consumer<byte[], byte[]> kafkaConsumer;

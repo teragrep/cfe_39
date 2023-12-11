@@ -21,7 +21,6 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class KafkaController {
-    // TODO: Create kafka consumer groups.
     // rlo_09 KafkaReader is the code that I should take a look at. ReadCoordinator alone won't allow access to the kafka offsets, it must be done in KafkaReader.
     // ReadCoordinator uses the KafkaReader, but it's set as private and there are no functions for accessing it through ReadCoordinator.
     // The enable.auto.commit=false is set in config and it is fetched by the config.getKafkaConsumerProperties().
@@ -92,28 +91,21 @@ public class KafkaController {
 
     // Creates kafka topic consumer based on input parameters.
     private void createReader(String topic, List<TopicCounter> topicCounters) throws SQLException {
+
+        // Create a new topicCounter object for the topic that has not been added to topicCounters-list yet.
         TopicCounter topicCounter = new TopicCounter(topic);
+        // Add the new topicCounter object to the list.
         topicCounters.add(topicCounter);
+
         // DatabaseOutput handles transferring the consumed data to storage (S3, mariadb, HDFS, etc.)
         // Kafka offset tracking must be included here.
-        // Topic is figured out in topicScan and the offsets for the topic should be figured out here.
-        Consumer<List<byte[]>> output = new DatabaseOutput(
-                config,
-                topic,
-                runtimeStatistics,
-                topicCounter
+        // Topic is figured out in topicScan so the offsets for the topic should be figured out here.
+        Consumer<List<RecordOffsetObject>> output = new DatabaseOutput(
+                config, // Configuration settings
+                topic, // String, the name of the topic
+                runtimeStatistics, // RuntimeStatistics object from metrics
+                topicCounter // TopicCounter object from metrics
         );
-
-        /*
-        Consumer<List<byte[]>> output = bytes -> {
-            for (byte[] bs : bytes) {
-                System.out.println(new String(bs, StandardCharsets.UTF_8));
-                topicCounter.addToTotalRecords(1);
-                topicCounter.addToTotalBytes(new String(bs, StandardCharsets.UTF_8).length());
-            }
-        };
-{1}
-         */
 
         // The kafka offsets must be passed to HDFS. The consumer must also be set to manual commits so the HDFS can handle managing the commit offsets within the HDFS filenames.
         // plain rlo_09.ReadCoordinator won't give access to offset values. Implementing custom rlo_09 code in the package to achieve offset access.
@@ -123,6 +115,7 @@ public class KafkaController {
                 output
         );
 
+        // Every consumer is run in a separate thread.
         Thread readThread = new Thread(null, readCoordinator, topic);
         threads.add(readThread);
         readThread.start();
