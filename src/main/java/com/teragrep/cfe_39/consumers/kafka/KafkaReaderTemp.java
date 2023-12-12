@@ -38,20 +38,22 @@ public class KafkaReaderTemp implements AutoCloseable {
         while (kafkaRecordsIterator.hasNext()) {
             ConsumerRecord<byte[], byte[]> record = kafkaRecordsIterator.next();
             LOGGER.debug("adding from offset: " + record.offset());
-            // Do filtering here.
-            boolean checkStuff = checkIfProcessed(record.topic(), record.partition(), record.offset()); // TODO: Create checkIfProcessed method. Checks if the record has already been processed and stored in HDFS.
+            recordOffsetObjectList.add(new RecordOffsetObject(record.topic(), record.partition(), record.offset(), record.value()));
+
+/*            // SKIPPING IDEMPOTENT CONSUMER IMPLEMENTATION FOR NOW!
+            boolean checkStuff = checkIfProcessed(record.topic(), record.partition(), record.offset()); // Create checkIfProcessed method. Checks if the record has already been processed and stored in HDFS.
             if (!checkStuff) {
                 recordOffsetObjectList.add(new RecordOffsetObject(record.topic(), record.partition(), record.offset(), record.value()));
             }else{
-                // TODO: The consumer should update its offsets to effectively mark the message as consumed to ensure it is not redelivered, and no further action takes place.
-            }
+                // The consumer should update its offsets to effectively mark the message as consumed to ensure it is not redelivered, and no further action takes place.
+            }*/
         }
 
         if (!recordOffsetObjectList.isEmpty()) {
-            // This is the DatabaseOutput.accept() function. This is where the idempotent consumer pattern should be implemented.
+            // This is the DatabaseOutput.accept() function.
             // Offset and other required data for HDFS storage are added to the input parameters of the accept() function which processes the consumed record.
             callbackFunction.accept(recordOffsetObjectList);
-            kafkaConsumer.commitSync(); // FIXME: Should the commitSync() be moved outside of the if-brackets so the consumer could skip the already processed records properly?
+            kafkaConsumer.commitSync();
 
             /*
             commitSync():

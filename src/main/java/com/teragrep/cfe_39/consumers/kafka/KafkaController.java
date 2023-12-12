@@ -39,10 +39,8 @@ public class KafkaController {
     // If the message Id is not present in the table then a database transaction is started and the message Id is inserted.
     // The message is then processed performing the required business logic. Upon completion the transaction is committed.
 
-    // TODO requirements:
-
+    // requirements: SKIPPING IDEMPOTENT IMPLEMENTATION FOR NOW!
     // 1. The KafkaReader-class must be able to pass the offset values alongside the consumed message to the main class that is calling KafkaReader.
-
     // 2. The main class must handle the consuming of the kafka topics in an idempotent way as stated above.
     // This is achieved by using the HDFS filenames to store the topic_name and offset values of Kafka topics.
     // In other words Kafka consumers will consume topics normally according to the offsets that Kafka stores internally,
@@ -126,7 +124,7 @@ public class KafkaController {
         Pattern topicsRegex = Pattern.compile(config.getQueueTopicPattern());
 
         // Find the topics available in Kafka based on given QueueTopicPattern, both active and in-active.
-        // TODO: check how partitions are handled, need to allow using consumer groups for partition read assignments. aka. load balancing
+        // Check how partitions are handled, need to allow using consumer groups for partition read assignments. aka. load balancing
         Set<String> foundTopics = new HashSet<>();
         for (Map.Entry<String, List<PartitionInfo>> entry : listTopics.entrySet()) {
             Matcher matcher = topicsRegex.matcher(entry.getKey());

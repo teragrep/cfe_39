@@ -1,0 +1,7 @@
+{"namespace": "com.teragrep.cfe_39.avro",
+  "type": "record",
+  "name": "SyslogRecord",
+  "fields": [
+    {"name": "content", "type": "bytes"}
+  ]
+}
