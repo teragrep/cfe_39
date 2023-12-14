@@ -13,6 +13,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.*;
 import java.time.Instant;
+import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.function.Consumer;
 
@@ -46,6 +47,16 @@ public class DatabaseOutput implements Consumer<List<RecordOffsetObject>> {
     private final long minimumFreeSpace;
     private final long maximumFileSize;
     private final WritableQueue writableQueue; // TODO: Implement the WritableQueue for managing the stream of records.
+    private final ByteBuffer sourceConcatenationBuffer;
+    private final SDVector teragrepStreamName;
+    private final SDVector teragrepDirectory;
+    private final SDVector eventNodeSourceSource;
+    private final SDVector eventNodeRelaySource;
+    private final SDVector eventNodeSourceSourceModule;
+    private final SDVector eventNodeRelaySourceModule;
+    private final SDVector eventNodeSourceHostname;
+    private final SDVector eventNodeRelayHostname;
+    private final SDVector originHostname;
 
     DatabaseOutput(
             Config config,
@@ -56,8 +67,8 @@ public class DatabaseOutput implements Consumer<List<RecordOffsetObject>> {
         this.table = table;
         this.runtimeStatistics = runtimeStatistics;
         this.topicCounter = topicCounter;
-        this.minimumFreeSpace = 32; // TODO: CHECK RIGHT VALUE FOR minimumFreeSpace
-        this.maximumFileSize = 64;
+        this.minimumFreeSpace = 32000000; // TODO: CHECK RIGHT VALUE FOR minimumFreeSpace
+        this.maximumFileSize = 64000000; // TODO: CHECK RIGHT VALUE FOR maximumFileSize. Maximum file size should be 64M.
         // TODO: Extract queueDirectory and queueNamePrefix values from config!
         // queueDirectory (folder) is named based on topic name, something like this: hdfs:///opt/teragrep/cfe_39/srv/topic_name
         // queueNamePrefix is partition, for example 0
@@ -66,13 +77,25 @@ public class DatabaseOutput implements Consumer<List<RecordOffsetObject>> {
                 "queueDirectory",
                 "queueNamePrefix"
         );
+        this.sourceConcatenationBuffer = ByteBuffer.allocateDirect(256*1024);
+        teragrepStreamName = new SDVector("teragrep@48577","streamname");
+        teragrepDirectory = new SDVector("teragrep@48577","directory");
+        this.eventNodeSourceSource = new SDVector("event_node_source@48577","source");
+        this.eventNodeRelaySource = new SDVector("event_node_relay@48577","source");
+        this.eventNodeSourceSourceModule = new SDVector("event_node_source@48577","source_module");
+        this.eventNodeRelaySourceModule = new SDVector("event_node_relay@48577","source_module");
+        this.eventNodeSourceHostname = new SDVector("event_node_source@48577","hostname");
+        this.eventNodeRelayHostname = new SDVector("event_node_relay@48577","hostname");
+        this.originHostname = new SDVector("origin@48577","hostname");
     }
 
     boolean checkSizeTooLarge(long fileSize) {
         try {
             // If the syslogAvroWriter is already initialized, check the filesize so it doesn't go above 64M.
             if (fileSize > maximumFileSize) {
-                // file too large
+                // file too large for adding the new record, write the still adequately sized AVRO-file to the HDFS database and create a new empty AVRO-file.
+
+                HDFSWriter.commit(); // TODO: Implement module for writing the adequately sized AVRO-file to the HDFS database. Needs to have the topic, partition and offset values of the last Kafka-record that was written to the AVRO-file as input parameters.
 
                 syslogAvroWriter.close();
                 File syslogFile =
@@ -84,6 +107,16 @@ public class DatabaseOutput implements Consumer<List<RecordOffsetObject>> {
             throw new UncheckedIOException(ioException);
         }
         return false;
+    }
+
+    private long rfc3339ToEpoch(ZonedDateTime zonedDateTime) {
+        final Instant instant = zonedDateTime.toInstant();
+
+        final long MICROS_PER_SECOND = 1000L * 1000L;
+        final long NANOS_PER_MICROS = 1000L;
+        final long sec = Math.multiplyExact(instant.getEpochSecond(), MICROS_PER_SECOND);
+
+        return Math.addExact(sec, instant.getNano() / NANOS_PER_MICROS);
     }
 
     @Override
@@ -135,11 +168,42 @@ public class DatabaseOutput implements Consumer<List<RecordOffsetObject>> {
                     //  Write all the data into a file using AVRO.
                     //  The size of each AVRO-serialized file should be as close to 64M as possible, and the name of the file should be set based on topic+partition+offset.
 
-                    // TODO: Include stream (aka sourcetype) and directory (aka index) as well in syslogRecord. It only has record at the moment. Basically make the schema similar to that was used in mariadb...
-                    syslogRecord.setContent(ByteBuffer.wrap(byteArray)); // byteArray is the loop's current recordOffsetObject.record
+                    /*
+                    EXAMPLE FORMAT FROM PTH_06.KafkaReconrdConverter WHICH SHOULD BE USED FOR AVRO-FORMAT!
+                    return RowFactory.create(
+                            Timestamp.from(instant),                    // 0 "_time", DataTypes.TimestampType
+                            UTF8String.fromBytes(message).toString(),   // 1 "_raw", DataTypes.StringType
+                            UTF8String.fromBytes(index).toString(),     // 2 "directory", DataTypes.StringType
+                            UTF8String.fromBytes(sourcetype).toString(),// 3 "stream", DataTypes.StringType
+                            UTF8String.fromBytes(hostname).toString(),  // 4 "host", DataTypes.StringType,
+                            UTF8String.fromBytes(input).toString(),     // 5 "input", DataTypes.StringType
+                            partition,                                  // 6 "partition", DataTypes.StringType
+                            offset,                                     // 7 "offset", DataTypes.LongType
+                            UTF8String.fromBytes(origin).toString()     // 8 "origin", DataTypes.StringType
+                    );
+                    */
+
+                    // input
+                    final byte[] source = eventToSource();
+
+                    // origin
+                    final byte[] origin = eventToOrigin();
+
+                    // TODO: Format: Use AVRO format with syslog columns as indexed ones
+                    final long epochMicros = rfc3339ToEpoch(new RFC5424Timestamp(rfc5424Frame.timestamp).toZonedDateTime());
+                    syslogRecord.setTimestamp(epochMicros);
+                    syslogRecord.setMessage(rfc5424Frame.msg.toString());
+                    syslogRecord.setDirectory(rfc5424Frame.structuredData.getValue(teragrepDirectory).toString());
+                    syslogRecord.setStream(rfc5424Frame.structuredData.getValue(teragrepStreamName).toString());
+                    syslogRecord.setHost(rfc5424Frame.hostname.toString());
+                    syslogRecord.setInput(source.toString());
+                    syslogRecord.setPartition(recordOffsetObject.partition.toString());
+                    syslogRecord.setOffset(recordOffsetObject.offset);
+                    syslogRecord.setOrigin(origin.toString());
+
                     // Calculate the size of syslogRecord that is going to be written to syslogAvroWriter-file.
                     long capacity = syslogRecord.toByteBuffer().capacity();
-                    checkSizeTooLarge(syslogAvroWriter.getFileSize() + capacity); // TODO: Fix the checkSizeTooLarge functionality so the closed syslogAvroWriter-file can be transferred to HDFS.
+                    checkSizeTooLarge(syslogAvroWriter.getFileSize() + capacity);
                     syslogAvroWriter.write(syslogRecord);
 
                     /*new RFC5424Timestamp(rfc5424Frame.timestamp).toZonedDateTime().toInstant().getEpochSecond();
@@ -152,10 +216,10 @@ public class DatabaseOutput implements Consumer<List<RecordOffsetObject>> {
             }
         }
 
-        // Handle possible "leftover" syslogRecords from the loop. TODO: Most likely borked like this, fix it in testing.
+        // Handle possible "leftover" syslogRecords from the loop. TODO: Most likely borked like this because AVRO-file should always have the schema stored in it. Maybe set syslogAvroWriter to null after every HDFSWriter.commit() etc.
         try {
             if (syslogAvroWriter.getFileSize() > 0) {
-                syslogAvroWriter.write(syslogRecord);
+                HDFSWriter.commit(); // commits the final AVRO-file to HDFS.
             }
         } catch (IOException e) {
             throw new RuntimeException(e);
@@ -244,5 +308,82 @@ public class DatabaseOutput implements Consumer<List<RecordOffsetObject>> {
                         + ANSI_RESET
         );
         lastTimeCalled = Instant.now().toEpochMilli();
+    }
+
+
+
+    private byte[] eventToOrigin() {
+        byte[] origin;
+        Fragment originFragment = rfc5424Frame.structuredData.getValue(originHostname);
+        if (!originFragment.isStub) {
+            origin = originFragment.toBytes();
+        }
+        else {
+            origin = new byte[]{};
+        }
+        return origin;
+    }
+
+    private byte[] eventToSource() {
+        //input is produced from SD element event_node_source@48577 by
+        // concatenating "source_module:hostname:source". in case
+        //if event_node_source@48577 is not available use event_node_relay@48577.
+        //If neither are present, use null value.
+
+        sourceConcatenationBuffer.clear();
+
+        Fragment sourceModuleFragment = rfc5424Frame.structuredData.getValue(eventNodeSourceSourceModule);
+        if (sourceModuleFragment.isStub) {
+            sourceModuleFragment = rfc5424Frame.structuredData.getValue(eventNodeRelaySourceModule);
+        }
+
+        byte[] source_module;
+        if (!sourceModuleFragment.isStub) {
+            source_module = sourceModuleFragment.toBytes();
+        }
+        else {
+            source_module = new byte[]{};
+        }
+
+        Fragment sourceHostnameFragment = rfc5424Frame.structuredData.getValue(eventNodeSourceHostname);
+        if (sourceHostnameFragment.isStub) {
+            sourceHostnameFragment = rfc5424Frame.structuredData.getValue(eventNodeRelayHostname);
+        }
+
+        byte[] source_hostname;
+        if (!sourceHostnameFragment.isStub) {
+            source_hostname = sourceHostnameFragment.toBytes();
+        }
+        else {
+            source_hostname = new byte[]{};
+        }
+
+
+        Fragment sourceSourceFragment = rfc5424Frame.structuredData.getValue(eventNodeSourceSource);
+        if (sourceHostnameFragment.isStub) {
+            sourceSourceFragment = rfc5424Frame.structuredData.getValue(eventNodeRelaySource);
+        }
+
+        byte[] source_source;
+        if (!sourceSourceFragment.isStub) {
+            source_source = sourceSourceFragment.toBytes();
+        }
+        else {
+            source_source = new byte[]{};
+        }
+
+
+        // source_module:hostname:source"
+        sourceConcatenationBuffer.put(source_module);
+        sourceConcatenationBuffer.put((byte) ':');
+        sourceConcatenationBuffer.put(source_hostname);
+        sourceConcatenationBuffer.put((byte)':');
+        sourceConcatenationBuffer.put(source_source);
+
+        sourceConcatenationBuffer.flip();
+        byte[] input = new byte[sourceConcatenationBuffer.remaining()];
+        sourceConcatenationBuffer.get(input);
+
+        return input;
     }
 }
