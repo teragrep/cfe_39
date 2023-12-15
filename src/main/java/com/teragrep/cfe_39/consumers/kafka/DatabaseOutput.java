@@ -119,6 +119,7 @@ public class DatabaseOutput implements Consumer<List<RecordOffsetObject>> {
         return Math.addExact(sec, instant.getNano() / NANOS_PER_MICROS);
     }
 
+    // Input parameter is a list of RecordOffsetObjects. Each object contains a record and its metadata (topic, partition and offset).
     @Override
     public void accept(List<RecordOffsetObject> recordOffsetObjectList) {
         long thisTime = Instant.now().toEpochMilli();
@@ -194,7 +195,7 @@ public class DatabaseOutput implements Consumer<List<RecordOffsetObject>> {
                     syslogRecord.setTimestamp(epochMicros);
                     syslogRecord.setMessage(rfc5424Frame.msg.toString());
                     syslogRecord.setDirectory(rfc5424Frame.structuredData.getValue(teragrepDirectory).toString());
-                    syslogRecord.setStream(rfc5424Frame.structuredData.getValue(teragrepStreamName).toString());
+                    syslogRecord.setStream(rfc5424Frame.structuredData.getValue(teragrepStreamName).toString()); // Or is sourcetype/stream supposed to be rfc5424Frame.appName.toString() instead?
                     syslogRecord.setHost(rfc5424Frame.hostname.toString());
                     syslogRecord.setInput(source.toString());
                     syslogRecord.setPartition(recordOffsetObject.partition.toString());
@@ -203,7 +204,9 @@ public class DatabaseOutput implements Consumer<List<RecordOffsetObject>> {
 
                     // Calculate the size of syslogRecord that is going to be written to syslogAvroWriter-file.
                     long capacity = syslogRecord.toByteBuffer().capacity();
+                    // Check if there is still room in syslogAvroWriter for another syslogRecord. Commit syslogAvroWriter to HDFS if no room left, emptying it out in the process.
                     checkSizeTooLarge(syslogAvroWriter.getFileSize() + capacity);
+                    // Add syslogRecord to syslogAvroWriter which has rooom for new syslogRecord.
                     syslogAvroWriter.write(syslogRecord);
 
                     /*new RFC5424Timestamp(rfc5424Frame.timestamp).toZonedDateTime().toInstant().getEpochSecond();
@@ -216,20 +219,20 @@ public class DatabaseOutput implements Consumer<List<RecordOffsetObject>> {
             }
         }
 
-        // Handle possible "leftover" syslogRecords from the loop. TODO: Most likely borked like this because AVRO-file should always have the schema stored in it. Maybe set syslogAvroWriter to null after every HDFSWriter.commit() etc.
+        // Handle the "leftover" syslogRecords from the loop.
         try {
-            if (syslogAvroWriter.getFileSize() > 0) {
+            if (syslogAvroWriter != null) {
                 HDFSWriter.commit(); // commits the final AVRO-file to HDFS.
             }
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
 
-        // TODO: BELOW STUFF IS GOING TO BE EITHER SCRAPPED OR MOVED TO ANOTHER METHOD WHICH IS THEN CALLED SEPARATELY! EVERYTHING SHOULD BE DONE WITHIN THE ABOVE LOOP!
+        // TODO: BELOW STUFF IS GOING TO BE EITHER SCRAPPED OR MOVED TO HDFSWriter.java METHODS WHICH ARE THEN CALLED SEPARATELY! EVERYTHING SHOULD BE DONE WITHIN THE ABOVE LOOP!
 
         long start = Instant.now().toEpochMilli();
 
-        // Add the code for sending the AVRO-serialized data to HDFS here, performance is measured between the start/end.
+        /*// Add the code for sending the AVRO-serialized data to HDFS here, performance is measured between the start/end.
         //  Also remember to implement Kerberized access to HDFS.
         String hdfsuri = ""; // Get from config.
 
@@ -273,7 +276,7 @@ public class DatabaseOutput implements Consumer<List<RecordOffsetObject>> {
 
         } catch (IOException e) {
             throw new RuntimeException(e);
-        }
+        }*/
 
         // TODO END
 
