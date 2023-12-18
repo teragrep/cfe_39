@@ -46,7 +46,7 @@ class SyslogAvroWriter implements AutoCloseable {
 
     void write(SyslogRecord syslogRecord) throws IOException{
         dataFileWriter.append(syslogRecord);
-        dataFileWriter.flush(); // TODO: Avro files 'flush' must be called as few times as possible. Check memory usage impact
+        // dataFileWriter.flush(); // TODO: Avro files 'flush' must be called as few times as possible. Check memory usage impact. Use only automatic flush which is triggered when .close() is called?
     }
 
     public void close() throws IOException {

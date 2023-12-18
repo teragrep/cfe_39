@@ -7,24 +7,30 @@ import org.apache.hadoop.fs.LocalFileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
 
+import java.io.File;
 import java.io.IOException;
 import java.net.URI;
 
 public class HDFSWriter implements AutoCloseable{
 
-    // TODO: Add input parameters
+    private String fileName;
+    private String fileContent;
+    private String path;
+    private String hdfsuri;
+    private Configuration conf;
+
+    // TODO: Add input parameters, for example config.
     public HDFSWriter() {
         // TODO: Code for initializing the class
-        // Add the code for sending the AVRO-serialized data to HDFS here, performance is measured between the start/end.
         //  Also remember to implement Kerberized access to HDFS.
-        String hdfsuri = ""; // Get from config.
+        hdfsuri = ""; // Get from config.
 
-        String path="/user/hdfs/example/hdfs/";
-        String fileName= recordOffsetObjectList+".csv"; // FIXME
-        String fileContent="hello;world";
+        path="/user/hdfs/example/hdfs/";
+        fileName= "test.csv"; // FIXME
+        fileContent="hello;world";
 
         // ====== Init HDFS File System Object
-        Configuration conf = new Configuration();
+        conf = new Configuration();
         // Set FileSystem URI
         conf.set("fs.defaultFS", hdfsuri);
         // Because of Maven
@@ -35,9 +41,10 @@ public class HDFSWriter implements AutoCloseable{
         System.setProperty("hadoop.home.dir", "/");
     }
 
-    // TODO: Add input parameters
-    public void commit() {
+    // TODO: Add more input parameters that are needed for creating the proper filename for HDFS. At least Topic, Partition and Offset.
+    public void commit(File syslogFile) {
         // TODO: code for committing the AVRO-file to HDFS
+
         //Get the filesystem - HDFS
         try {
             FileSystem fs = FileSystem.get(URI.create(hdfsuri), conf);
@@ -65,10 +72,6 @@ public class HDFSWriter implements AutoCloseable{
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
-    }
-
-    public void add() {
-        // TODO: code for adding file for commit
     }
 
     public void close() {

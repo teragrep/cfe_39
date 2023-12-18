@@ -57,6 +57,7 @@ public class DatabaseOutput implements Consumer<List<RecordOffsetObject>> {
     private final SDVector eventNodeSourceHostname;
     private final SDVector eventNodeRelayHostname;
     private final SDVector originHostname;
+    private File syslogFile;
 
     DatabaseOutput(
             Config config,
@@ -95,9 +96,14 @@ public class DatabaseOutput implements Consumer<List<RecordOffsetObject>> {
             if (fileSize > maximumFileSize) {
                 // file too large for adding the new record, write the still adequately sized AVRO-file to the HDFS database and create a new empty AVRO-file.
 
-                HDFSWriter.commit(); // TODO: Implement module for writing the adequately sized AVRO-file to the HDFS database. Needs to have the topic, partition and offset values of the last Kafka-record that was written to the AVRO-file as input parameters.
-
+                // This part closes the writing of now "complete" AVRO-file and stores the file to HDFS.
                 syslogAvroWriter.close();
+                try (HDFSWriter writer = new HDFSWriter()) {
+                    writer.commit(syslogFile); // TODO: Implement module for writing the adequately sized AVRO-file to the HDFS database. Needs to have the topic, partition and offset values of the last Kafka-record that was written to the AVRO-file as input parameters.
+                }
+                // TODO: Delete AVRO-files that have been committed to HDFS?
+
+                // This part defines a new empty file to which the new AVRO-serialized records are stored until it again hits the 64M size limit.
                 File syslogFile =
                         writableQueue.getNextWritableFile();
                 syslogAvroWriter = new SyslogAvroWriter(syslogFile);
@@ -140,7 +146,7 @@ public class DatabaseOutput implements Consumer<List<RecordOffsetObject>> {
             // Initializing syslogAvroWriter.
             if (syslogAvroWriter == null) {
                 try {
-                    File syslogFile =
+                    syslogFile =
                             writableQueue.getNextWritableFile();
                     // TODO: Check how topic name, partition and offset should be added to the HDFS filename.
                     //  The avro serialization filename shouldn't really matter as long as the name is changed when stuff is stored to HDFS.
@@ -222,7 +228,11 @@ public class DatabaseOutput implements Consumer<List<RecordOffsetObject>> {
         // Handle the "leftover" syslogRecords from the loop.
         try {
             if (syslogAvroWriter != null) {
-                HDFSWriter.commit(); // commits the final AVRO-file to HDFS.
+                syslogAvroWriter.close();
+                try (HDFSWriter writer = new HDFSWriter()) {
+                    writer.commit(syslogFile); // commits the final AVRO-file to HDFS.
+                }
+                // TODO: Delete AVRO-files that have been committed to HDFS?
             }
         } catch (IOException e) {
             throw new RuntimeException(e);
@@ -230,7 +240,7 @@ public class DatabaseOutput implements Consumer<List<RecordOffsetObject>> {
 
         // TODO: BELOW STUFF IS GOING TO BE EITHER SCRAPPED OR MOVED TO HDFSWriter.java METHODS WHICH ARE THEN CALLED SEPARATELY! EVERYTHING SHOULD BE DONE WITHIN THE ABOVE LOOP!
 
-        long start = Instant.now().toEpochMilli();
+
 
         /*// Add the code for sending the AVRO-serialized data to HDFS here, performance is measured between the start/end.
         //  Also remember to implement Kerberized access to HDFS.
@@ -280,6 +290,8 @@ public class DatabaseOutput implements Consumer<List<RecordOffsetObject>> {
 
         // TODO END
 
+        long start = Instant.now().toEpochMilli();
+        // Measures performance of code that is between start and end.
         long end = Instant.now().toEpochMilli();
 
         long took = (end - start);
