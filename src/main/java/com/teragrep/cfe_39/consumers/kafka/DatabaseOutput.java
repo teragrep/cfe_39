@@ -22,10 +22,8 @@ import java.nio.ByteBuffer;
 
 import java.net.URI;
 
-// TODO:
 //  The kafka stream should first be deserialized using rlo_06 and then serialized again using avro and stored in HDFS.
 //  The target where the record is stored in HDFS is based on the topic, partition and offset. ie. topic_name/0.123456 where offset is 123456
-//  First implement the AVRO serialization (saves the data into a file) and then implement the HDFS access for storing the data.
 
 public class DatabaseOutput implements Consumer<List<RecordOffsetObject>> {
     private static final Logger LOGGER = LoggerFactory.getLogger(DatabaseOutput.class);
@@ -42,11 +40,10 @@ public class DatabaseOutput implements Consumer<List<RecordOffsetObject>> {
     public static final String ANSI_RESET = "\u001B[0m";
     public static final String ANSI_GREEN = "\u001B[32m";
     public static final String ANSI_BLUE = "\u001B[34m";
-    private final SyslogRecord syslogRecord = new SyslogRecord();
     private SyslogAvroWriter syslogAvroWriter;
     private final long minimumFreeSpace;
     private final long maximumFileSize;
-    private final WritableQueue writableQueue; // TODO: Implement the WritableQueue for managing the stream of records.
+    private final WritableQueue writableQueue;
     private final ByteBuffer sourceConcatenationBuffer;
     private final SDVector teragrepStreamName;
     private final SDVector teragrepDirectory;
@@ -58,6 +55,7 @@ public class DatabaseOutput implements Consumer<List<RecordOffsetObject>> {
     private final SDVector eventNodeRelayHostname;
     private final SDVector originHostname;
     private File syslogFile;
+    private final Config config;
 
     DatabaseOutput(
             Config config,
@@ -65,19 +63,19 @@ public class DatabaseOutput implements Consumer<List<RecordOffsetObject>> {
             RuntimeStatistics runtimeStatistics,
             TopicCounter topicCounter
     ) {
+        this.config = config;
         this.table = table;
         this.runtimeStatistics = runtimeStatistics;
         this.topicCounter = topicCounter;
         this.minimumFreeSpace = 32000000; // TODO: CHECK RIGHT VALUE FOR minimumFreeSpace
         this.maximumFileSize = 64000000; // TODO: CHECK RIGHT VALUE FOR maximumFileSize. Maximum file size should be 64M.
-        // TODO: Extract queueDirectory and queueNamePrefix values from config!
-        // queueDirectory (folder) is named based on topic name, something like this: hdfs:///opt/teragrep/cfe_39/srv/topic_name
-        // queueNamePrefix is partition, for example 0
-        // The end result that is produced in WritableQueue is hdfs:///opt/teragrep/cfe_39/srv/topic_name/0.12345 where 12345 is offset and 0 the partition.
+
+        // queueDirectory and queueNamePrefix shouldn't be critical to name according to the HDFS requirements (topic+partition+offset for filename) as it's just used for storing the AVRO-serialized files.
         this.writableQueue = new WritableQueue(
-                "queueDirectory",
-                "queueNamePrefix"
+                config.getQueueDirectory(),
+                config.getQueueNamePrefix()
         );
+
         this.sourceConcatenationBuffer = ByteBuffer.allocateDirect(256*1024);
         teragrepStreamName = new SDVector("teragrep@48577","streamname");
         teragrepDirectory = new SDVector("teragrep@48577","directory");
@@ -90,7 +88,7 @@ public class DatabaseOutput implements Consumer<List<RecordOffsetObject>> {
         this.originHostname = new SDVector("origin@48577","hostname");
     }
 
-    boolean checkSizeTooLarge(long fileSize) {
+    boolean checkSizeTooLarge(long fileSize, RecordOffsetObject lastObject) {
         try {
             // If the syslogAvroWriter is already initialized, check the filesize so it doesn't go above 64M.
             if (fileSize > maximumFileSize) {
@@ -98,8 +96,8 @@ public class DatabaseOutput implements Consumer<List<RecordOffsetObject>> {
 
                 // This part closes the writing of now "complete" AVRO-file and stores the file to HDFS.
                 syslogAvroWriter.close();
-                try (HDFSWriter writer = new HDFSWriter()) {
-                    writer.commit(syslogFile); // TODO: Implement module for writing the adequately sized AVRO-file to the HDFS database. Needs to have the topic, partition and offset values of the last Kafka-record that was written to the AVRO-file as input parameters.
+                try (HDFSWriter writer = new HDFSWriter(config, lastObject)) {
+                    writer.commit(syslogFile); // commits the final AVRO-file to HDFS.
                 }
                 // TODO: Delete AVRO-files that have been committed to HDFS?
 
@@ -134,21 +132,22 @@ public class DatabaseOutput implements Consumer<List<RecordOffsetObject>> {
         LOGGER.debug(ANSI_BLUE + "Fuura searching your batch for <[" + table + "]> with records <" + recordOffsetObjectList.size() + "> and took  <" + (ftook) + "> milliseconds. <" + (recordOffsetObjectList.size() * 1000L / ftook) + "> EPS. " + ANSI_RESET);
         long batchBytes = 0L;
 
-        // TODO: The recordOffsetObjectList loop will go through all the objects in the list.
+        //  The recordOffsetObjectList loop will go through all the objects in the list.
         //  While it goes through the list, the contents of the objects are serialized into an AVRO-file.
         //  When the file size is about to go above 64M, commit the file into HDFS using the latest topic/partition/offset values as the filename and start fresh with an empty AVRO-file.
         //  Serialize the object that was going to make the file go above 64M into the now empty AVRO-file and continue the loop.
         // https://pagure.xnet.fi/com-teragrep/rlo_09/blob/avroness/f/src/main/java/com/teragrep/rlo_09/SyslogAvroWriter.java
         // https://pagure.xnet.fi/com-teragrep/rlo_09/blob/avroness/f/src/main/java/com/teragrep/rlo_09/WriteCoordinator.java
         // every recordOffsetObject.record on the recordOffsetObjectList basically represents a rlo_09 WriteCoordinator.accept(byte[] bytes) when the list is gone through in a loop.
+        RecordOffsetObject lastObject = null;
+        long start = Instant.now().toEpochMilli(); // Starts measuring performance here. Measures how long it takes to process the whole recordOffsetObjectList.
         for (RecordOffsetObject recordOffsetObject : recordOffsetObjectList) {
-
+            lastObject = recordOffsetObject;
             // Initializing syslogAvroWriter.
             if (syslogAvroWriter == null) {
                 try {
                     syslogFile =
                             writableQueue.getNextWritableFile();
-                    // TODO: Check how topic name, partition and offset should be added to the HDFS filename.
                     //  The avro serialization filename shouldn't really matter as long as the name is changed when stuff is stored to HDFS.
                     //  And the content of the AVRO-serialized file that is going to be stored in HDFS is finalized only when the maximumFileSize has been reached.
                     //  This means the HDFS filename is only finalized when the AVRO-serialized file is finalized, because every Kafka-record added to the file is going to change the offset that is going to be used for the filename.
@@ -158,7 +157,7 @@ public class DatabaseOutput implements Consumer<List<RecordOffsetObject>> {
                 }
             } else {
                 try {
-                    checkSizeTooLarge(syslogAvroWriter.getFileSize());
+                    checkSizeTooLarge(syslogAvroWriter.getFileSize(), lastObject);
                 } catch (IOException ioException) {
                     throw new UncheckedIOException(ioException);
                 }
@@ -173,7 +172,7 @@ public class DatabaseOutput implements Consumer<List<RecordOffsetObject>> {
                     // rfc5424Frame has loaded the record data, it's ready for deserialization.
                     //  Implement AVRO serialization for the Kafka records here, preparing the data for writing to HDFS.
                     //  Write all the data into a file using AVRO.
-                    //  The size of each AVRO-serialized file should be as close to 64M as possible, and the name of the file should be set based on topic+partition+offset.
+                    //  The size of each AVRO-serialized file should be as close to 64M as possible.
 
                     /*
                     EXAMPLE FORMAT FROM PTH_06.KafkaReconrdConverter WHICH SHOULD BE USED FOR AVRO-FORMAT!
@@ -196,22 +195,25 @@ public class DatabaseOutput implements Consumer<List<RecordOffsetObject>> {
                     // origin
                     final byte[] origin = eventToOrigin();
 
-                    // TODO: Format: Use AVRO format with syslog columns as indexed ones
+                    // Format: Use AVRO format with syslog columns as indexed ones
                     final long epochMicros = rfc3339ToEpoch(new RFC5424Timestamp(rfc5424Frame.timestamp).toZonedDateTime());
-                    syslogRecord.setTimestamp(epochMicros);
-                    syslogRecord.setMessage(rfc5424Frame.msg.toString());
-                    syslogRecord.setDirectory(rfc5424Frame.structuredData.getValue(teragrepDirectory).toString());
-                    syslogRecord.setStream(rfc5424Frame.structuredData.getValue(teragrepStreamName).toString()); // Or is sourcetype/stream supposed to be rfc5424Frame.appName.toString() instead?
-                    syslogRecord.setHost(rfc5424Frame.hostname.toString());
-                    syslogRecord.setInput(source.toString());
-                    syslogRecord.setPartition(recordOffsetObject.partition.toString());
-                    syslogRecord.setOffset(recordOffsetObject.offset);
-                    syslogRecord.setOrigin(origin.toString());
+                    SyslogRecord syslogRecord = SyslogRecord.newBuilder()
+                            .setTimestamp(epochMicros)
+                            .setMessage(rfc5424Frame.msg.toString())
+                            .setDirectory(rfc5424Frame.structuredData.getValue(teragrepDirectory).toString())
+                            .setStream(rfc5424Frame.structuredData.getValue(teragrepStreamName).toString()) // Or is sourcetype/stream supposed to be rfc5424Frame.appName.toString() instead?
+                            .setHost(rfc5424Frame.hostname.toString())
+                            .setInput(source.toString())
+                            .setPartition(recordOffsetObject.partition.toString())
+                            .setOffset(recordOffsetObject.offset)
+                            .setOrigin(origin.toString())
+                            .build();
+
 
                     // Calculate the size of syslogRecord that is going to be written to syslogAvroWriter-file.
                     long capacity = syslogRecord.toByteBuffer().capacity();
                     // Check if there is still room in syslogAvroWriter for another syslogRecord. Commit syslogAvroWriter to HDFS if no room left, emptying it out in the process.
-                    checkSizeTooLarge(syslogAvroWriter.getFileSize() + capacity);
+                    checkSizeTooLarge(syslogAvroWriter.getFileSize() + capacity, lastObject);
                     // Add syslogRecord to syslogAvroWriter which has rooom for new syslogRecord.
                     syslogAvroWriter.write(syslogRecord);
 
@@ -229,7 +231,7 @@ public class DatabaseOutput implements Consumer<List<RecordOffsetObject>> {
         try {
             if (syslogAvroWriter != null) {
                 syslogAvroWriter.close();
-                try (HDFSWriter writer = new HDFSWriter()) {
+                try (HDFSWriter writer = new HDFSWriter(config, lastObject)) {
                     writer.commit(syslogFile); // commits the final AVRO-file to HDFS.
                 }
                 // TODO: Delete AVRO-files that have been committed to HDFS?
@@ -238,59 +240,6 @@ public class DatabaseOutput implements Consumer<List<RecordOffsetObject>> {
             throw new RuntimeException(e);
         }
 
-        // TODO: BELOW STUFF IS GOING TO BE EITHER SCRAPPED OR MOVED TO HDFSWriter.java METHODS WHICH ARE THEN CALLED SEPARATELY! EVERYTHING SHOULD BE DONE WITHIN THE ABOVE LOOP!
-
-
-
-        /*// Add the code for sending the AVRO-serialized data to HDFS here, performance is measured between the start/end.
-        //  Also remember to implement Kerberized access to HDFS.
-        String hdfsuri = ""; // Get from config.
-
-        String path="/user/hdfs/example/hdfs/";
-        String fileName= recordOffsetObjectList+".csv";
-        String fileContent="hello;world";
-
-        // ====== Init HDFS File System Object
-        Configuration conf = new Configuration();
-        // Set FileSystem URI
-        conf.set("fs.defaultFS", hdfsuri);
-        // Because of Maven
-        conf.set("fs.hdfs.impl", DistributedFileSystem.class.getName());
-        conf.set("fs.file.impl", LocalFileSystem.class.getName());
-        // Set HADOOP user
-        System.setProperty("HADOOP_USER_NAME", "hdfs");
-        System.setProperty("hadoop.home.dir", "/");
-        //Get the filesystem - HDFS
-        try {
-            FileSystem fs = FileSystem.get(URI.create(hdfsuri), conf);
-
-            //==== Create folder if not exists
-            Path workingDir=fs.getWorkingDirectory();
-            Path newFolderPath= new Path(path);
-            if(!fs.exists(newFolderPath)) {
-                // Create new Directory
-                fs.mkdirs(newFolderPath);
-                // logger.info("Path "+path+" created.");
-            }
-
-            //==== Write file
-            // logger.info("Begin Write file into hdfs");
-            //Create a path
-            Path hdfswritepath = new Path(newFolderPath + "/" + fileName);
-            //Init output stream
-            FSDataOutputStream outputStream=fs.create(hdfswritepath);
-            //Cassical output stream usage
-            outputStream.writeBytes(fileContent);
-            outputStream.close();
-            // logger.info("End Write file into hdfs");
-
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }*/
-
-        // TODO END
-
-        long start = Instant.now().toEpochMilli();
         // Measures performance of code that is between start and end.
         long end = Instant.now().toEpochMilli();
 

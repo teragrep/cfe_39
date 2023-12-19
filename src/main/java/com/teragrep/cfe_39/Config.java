@@ -33,6 +33,10 @@ public class Config {
     private final int createPartitionsInAdvanceHours;
     private final boolean overrideTableLocation;
     private final String tableLocation;
+    private final String hdfsPath;
+    private final String hdfsuri;
+    private final String queueDirectory;
+    private final String queueNamePrefix;
 
     Config() throws IOException {
         Properties properties = new Properties();
@@ -76,6 +80,15 @@ public class Config {
         if(overrideTableLocation && tableLocation.isEmpty()) {
             throw new IllegalArgumentException("db.tableLocation resulted in empty string when db.overrideTableLocation was true");
         }
+
+        // HDFS
+        this.hdfsPath = properties.getProperty("hdfsPath", "hdfs:///opt/teragrep/cfe_39/srv/");
+        this.hdfsuri = properties.getProperty("hdfsuri", "");
+
+        // AVRO
+        this.queueDirectory = properties.getProperty("queueDirectory", "");
+        this.queueNamePrefix = properties.getProperty("queueNamePrefix", "");
+
 
         // kafka
         this.queueTopicPattern = properties.getProperty("queueTopicPattern", "^.*$");
@@ -129,6 +142,20 @@ public class Config {
 
     public String getDbPassword() {
         return dbPassword;
+    }
+
+    public String getHdfsPath() {
+        return hdfsPath;
+    }
+    public String getHdfsuri() {
+        return hdfsuri;
+    }
+
+    public String getQueueDirectory() {
+        return queueDirectory;
+    }
+    public String getQueueNamePrefix() {
+        return queueNamePrefix;
     }
 
     public boolean isReplicationEnabled() {
