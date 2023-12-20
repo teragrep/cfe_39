@@ -1,9 +1,10 @@
 package com.teragrep.cfe_39.metrics.topic;
 
 import com.teragrep.cfe_39.metrics.mxj.MXJEndpoint;
-import com.teragrep.mxj_01.CompositeDataWriter;
+// FIXME
+/*import com.teragrep.mxj_01.CompositeDataWriter;
 import com.teragrep.mxj_01.DynamicBean;
-import com.teragrep.mxj_01.TabularDataWriter;
+import com.teragrep.mxj_01.TabularDataWriter; */
 
 import javax.management.*;
 import java.util.List;
@@ -11,12 +12,14 @@ import java.util.List;
 public class TopicStatistics {
     private final List<TopicCounter> topicList;
 
-    private final DynamicBean dynamicBean;
+    // FIXME
+    // private final DynamicBean dynamicBean;
 
     public TopicStatistics(List<TopicCounter> topicList) {
         this.topicList = topicList;
 
-        // page
+        // FIXME
+/*        // page
         CompositeDataWriter<TopicCounter> topicCounterWriter = CompositeDataWriter.builder(TopicCounter.class)
                 .withTypeName("topic")
                 .withTypeDescription("Topic throughput")
@@ -44,16 +47,18 @@ public class TopicStatistics {
                         () -> topicList,
                         topicListWriter
                 )
-                .build();
+                .build();*/
     }
 
     public DynamicMBean register() {
-        MXJEndpoint mxjEndpoint = new MXJEndpoint(
+        // FIXME
+        /*MXJEndpoint mxjEndpoint = new MXJEndpoint(
                 "com.teragrep.cfe_30",
                 "Metrics",
                 "Topic",
                 dynamicBean
         );
-        return mxjEndpoint.register();
+        return mxjEndpoint.register();*/
+        return null;
     }
 }

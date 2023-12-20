@@ -24,7 +24,6 @@ public class MockKafkaConsumerFactoryTemp {
     final static private Logger LOGGER = LoggerFactory.getLogger(MockKafkaConsumerFactoryTemp.class);
 
     private MockKafkaConsumerFactoryTemp() {
-
     }
 
     private static void generateEvents(MockConsumer<byte[], byte[]> consumer) {

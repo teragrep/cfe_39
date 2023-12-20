@@ -25,6 +25,10 @@ import java.net.URI;
 //  The kafka stream should first be deserialized using rlo_06 and then serialized again using avro and stored in HDFS.
 //  The target where the record is stored in HDFS is based on the topic, partition and offset. ie. topic_name/0.123456 where offset is 123456
 
+// TODO: make testcases using MockKafkaConsumerFactory. The mock consumer is activated for testing using the configuration file: readerKafkaProperties.getProperty("useMockKafkaConsumer", "false")
+// DONE:
+// Thus the configuration file is the first thing to make for testcases, and the first testcases are for testing the configuration file.
+
 public class DatabaseOutput implements Consumer<List<RecordOffsetObject>> {
     private static final Logger LOGGER = LoggerFactory.getLogger(DatabaseOutput.class);
     private final RFC5424Frame rfc5424Frame = new RFC5424Frame(false);

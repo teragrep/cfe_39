@@ -15,10 +15,10 @@ import java.util.Properties;
 
 public class Config {
 
-    // db
+/*    // db
     private final String dbConnectionUrl;
     private final String dbUsername;
-    private final String dbPassword;
+    private final String dbPassword;*/
 
     // kafka
     private final String queueTopicPattern;
@@ -45,7 +45,7 @@ public class Config {
         properties.load(Files.newInputStream(configPath));
         LOGGER.debug("Got configuration: " + properties);
 
-        // db
+        /*// db
         this.dbConnectionUrl = properties.getProperty("db.connectionUrl");
         if (this.dbConnectionUrl == null) {
             throw new IllegalArgumentException("db.connectionUrl not set");
@@ -57,7 +57,7 @@ public class Config {
         this.dbPassword = properties.getProperty("db.password");
         if (this.dbPassword == null) {
             throw new IllegalArgumentException("db.password not set");
-        }
+        }*/
 
         String replicationEnabledString = properties.getProperty("db.replicationEnabled", "false");
         this.replicationEnabled = Boolean.parseBoolean(replicationEnabledString);
@@ -132,7 +132,7 @@ public class Config {
         return tableLocation;
     }
 
-    public String getDbConnectionUrl() {
+/*    public String getDbConnectionUrl() {
         return dbConnectionUrl;
     }
 
@@ -142,7 +142,7 @@ public class Config {
 
     public String getDbPassword() {
         return dbPassword;
-    }
+    }*/
 
     public String getHdfsPath() {
         return hdfsPath;

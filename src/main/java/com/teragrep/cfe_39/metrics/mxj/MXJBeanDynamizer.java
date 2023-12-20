@@ -1,6 +1,6 @@
 package com.teragrep.cfe_39.metrics.mxj;
 
-import com.teragrep.mxj_01.DynamicBean; // TODO: Fix the dependency failing to load.
+// import com.teragrep.mxj_01.DynamicBean; // TODO: Fix the dependency failing to load.
 
 import javax.management.DynamicMBean;
 import java.util.List;
@@ -13,7 +13,8 @@ public class MXJBeanDynamizer {
     }
 
     public DynamicMBean createDynamicMBean() {
-        DynamicBean.Builder builder =  DynamicBean.builder();
+        // FIXME
+        /*DynamicBean.Builder builder =  DynamicBean.builder();
 
         for (MXJItem a : mxjItems) {
             builder = builder.withSimpleAttribute(
@@ -24,6 +25,7 @@ public class MXJBeanDynamizer {
             );
         }
 
-        return builder.build();
+        return builder.build();*/
+        return null;
     }
 }
