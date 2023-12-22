@@ -6,6 +6,7 @@ import com.teragrep.cfe_39.metrics.*;
 import com.teragrep.cfe_39.metrics.topic.TopicCounter;
 import com.teragrep.cfe_39.metrics.topic.TopicStatistics;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
+import org.apache.kafka.clients.consumer.MockConsumer;
 import org.apache.kafka.common.PartitionInfo;
 import org.apache.kafka.common.serialization.ByteArrayDeserializer;
 import org.slf4j.Logger;
@@ -58,16 +59,24 @@ public class KafkaController {
 
     public KafkaController(Config config) {
         this.config = config;
-        this.kafkaConsumer = new KafkaConsumer<>(config.getKafkaConsumerProperties(), new ByteArrayDeserializer(), new ByteArrayDeserializer());
+        Properties readerKafkaProperties = config.getKafkaConsumerProperties();
+        boolean useMockKafkaConsumer = Boolean.parseBoolean(
+                readerKafkaProperties.getProperty("useMockKafkaConsumer", "false")
+        );
+        if (useMockKafkaConsumer) {
+            this.kafkaConsumer = MockKafkaConsumerFactoryTemp.getConsumer();
+        } else {
+            this.kafkaConsumer = new KafkaConsumer<>(config.getKafkaConsumerProperties(), new ByteArrayDeserializer(), new ByteArrayDeserializer());
+        }
     }
 
     public void run() throws InterruptedException {
         // register runtime statistics
-        runtimeStatistics.register();
+        // runtimeStatistics.register(); // FIXME
 
         // register duration statistics
         DurationStatistics durationStatistics = new DurationStatistics();
-        durationStatistics.register();
+        // durationStatistics.register(); // FIXME
 
         // register per topic counting
         List<TopicCounter> topicCounters = new CopyOnWriteArrayList<>();
@@ -120,7 +129,7 @@ public class KafkaController {
     }
 
     private void topicScan(DurationStatistics durationStatistics, List<TopicCounter> topicCounters) {
-        Map<String, List<PartitionInfo>> listTopics = kafkaConsumer.listTopics(Duration.ofSeconds(60));
+        Map<String, List<PartitionInfo>> listTopics = kafkaConsumer.listTopics(Duration.ofSeconds(60)); // TODO: The listTopics is empty, this means problems in mock kafka.
         Pattern topicsRegex = Pattern.compile(config.getQueueTopicPattern());
 
         // Find the topics available in Kafka based on given QueueTopicPattern, both active and in-active.
