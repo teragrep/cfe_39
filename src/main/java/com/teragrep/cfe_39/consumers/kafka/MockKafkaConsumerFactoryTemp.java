@@ -4,13 +4,13 @@ import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.MockConsumer;
 import org.apache.kafka.clients.consumer.OffsetResetStrategy;
+import org.apache.kafka.common.PartitionInfo;
 import org.apache.kafka.common.TopicPartition;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.nio.charset.StandardCharsets;
-import java.util.Collections;
-import java.util.HashMap;
+import java.util.*;
 
 /**
  * <h1>Mock Kafka Consumer Factory</h1>
@@ -157,6 +157,12 @@ public class MockKafkaConsumerFactoryTemp {
         endOffsets.put(topicPartition, 14L); // end is exclusive
         consumer.updateEndOffsets(endOffsets);
         LOGGER.debug(endOffsets.toString());
+
+        // consumer.updatePartitions() function must be used so the consumer.listTopics() function can work and return the list of topics properly.
+        List<PartitionInfo> mockPartitionInfo = new ArrayList<>();
+        mockPartitionInfo.add(new PartitionInfo("testConsumerTopic", 0, null, null, null));
+        consumer.updatePartitions("testConsumerTopic", mockPartitionInfo);
+
         return consumer;
     }
 }

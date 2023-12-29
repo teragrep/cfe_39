@@ -1,8 +1,15 @@
 package com.teragrep.cfe_39;
 
 import com.teragrep.cfe_39.consumers.kafka.KafkaController;
+import org.apache.avro.file.DataFileReader;
+import org.apache.avro.io.DatumReader;
+import org.apache.avro.specific.SpecificDatumReader;
 import org.junit.jupiter.api.Test;
+import com.teragrep.cfe_39.avro.SyslogRecord;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 
+import java.io.File;
 import java.io.IOException;
 import java.util.Properties;
 
@@ -25,7 +32,30 @@ public class KafkaConsumerTest {
         }
         // LOGGER.info("Running main program");
         KafkaController kafkaController = new KafkaController(config);
-        kafkaController.run(); // FIXME: java.lang.IllegalStateException: Pattern <[testConsumerTopic]> found no topics. at com.teragrep.cfe_39.consumers.kafka.KafkaController.topicScan(KafkaController.java:146)
+        kafkaController.run(); // TODO: Everything is working until kafkaController.topicScan(). AVRO serialization also seems to work well. Now moving to implementing HDFS database and testing it.
+    }
+
+    // Tests the serialization of the AVRO-file generated in kafkaConsumerTest(). Pathname depends on the configurations set in application.properties file.
+    @Test
+    public void AVROReaderTest() throws IOException {
+        // Deserialize Users from disk
+        Config config = new Config();
+        Path queueDirectory = Paths.get(config.getQueueDirectory());
+        File syslogFile = new File(
+                queueDirectory.toAbsolutePath()
+                        + File.separator
+                        + config.getQueueNamePrefix()
+                        + "."
+                        + 1
+        );;
+        DatumReader<SyslogRecord> userDatumReader = new SpecificDatumReader<>(SyslogRecord.class);
+        try (DataFileReader<SyslogRecord> dataFileReader = new DataFileReader<>(syslogFile, userDatumReader)) {
+            SyslogRecord user = null;
+            while (dataFileReader.hasNext()) {
+                user = dataFileReader.next(user);
+                System.out.println(user);
+            }
+        }
     }
 
     @Test

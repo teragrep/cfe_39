@@ -129,8 +129,8 @@ public class KafkaController {
     }
 
     private void topicScan(DurationStatistics durationStatistics, List<TopicCounter> topicCounters) {
-        Map<String, List<PartitionInfo>> listTopics = kafkaConsumer.listTopics(Duration.ofSeconds(60)); // TODO: The listTopics is empty, this means problems in mock kafka.
-        Pattern topicsRegex = Pattern.compile(config.getQueueTopicPattern());
+        Map<String, List<PartitionInfo>> listTopics = kafkaConsumer.listTopics(Duration.ofSeconds(60)); // Topics can be fetched from mock consumer if the consumer has been updated separately with the partition info.
+        Pattern topicsRegex = Pattern.compile(config.getQueueTopicPattern()); // Mock consumer has the partitions in this format: queueTopicPattern=^testConsumerTopic-*$
 
         // Find the topics available in Kafka based on given QueueTopicPattern, both active and in-active.
         // Check how partitions are handled, need to allow using consumer groups for partition read assignments. aka. load balancing

@@ -100,9 +100,10 @@ public class DatabaseOutput implements Consumer<List<RecordOffsetObject>> {
 
                 // This part closes the writing of now "complete" AVRO-file and stores the file to HDFS.
                 syslogAvroWriter.close();
-                try (HDFSWriter writer = new HDFSWriter(config, lastObject)) {
+                // TODO: RESTORE COMMENT BLOCK AFTER TESTING AVRO.
+                /*try (HDFSWriter writer = new HDFSWriter(config, lastObject)) {
                     writer.commit(syslogFile); // commits the final AVRO-file to HDFS.
-                }
+                }*/
                 // TODO: Delete AVRO-files that have been committed to HDFS?
 
                 // This part defines a new empty file to which the new AVRO-serialized records are stored until it again hits the 64M size limit.
@@ -235,9 +236,10 @@ public class DatabaseOutput implements Consumer<List<RecordOffsetObject>> {
         try {
             if (syslogAvroWriter != null) {
                 syslogAvroWriter.close();
-                try (HDFSWriter writer = new HDFSWriter(config, lastObject)) {
+                // TODO: RESTORE COMMENT BLOCK AFTER TESTING AVRO.
+                /*try (HDFSWriter writer = new HDFSWriter(config, lastObject)) {
                     writer.commit(syslogFile); // commits the final AVRO-file to HDFS.
-                }
+                }*/
                 // TODO: Delete AVRO-files that have been committed to HDFS?
             }
         } catch (IOException e) {
