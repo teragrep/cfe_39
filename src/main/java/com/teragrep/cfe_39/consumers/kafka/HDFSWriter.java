@@ -7,6 +7,7 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.LocalFileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
+import org.apache.hadoop.security.UserGroupInformation;
 
 import java.io.File;
 import java.io.IOException;
@@ -20,32 +21,49 @@ public class HDFSWriter implements AutoCloseable{
     private final String path;
     private final FileSystem fs;
 
-    public HDFSWriter(Config config, RecordOffsetObject lastObject) {
+    public HDFSWriter(Config config, RecordOffsetObject lastObject) throws IOException {
         // Code for initializing the class
         // Also remember to implement Kerberized access to HDFS.
         String hdfsuri = config.getHdfsuri(); // Get from config.
 
         // The filepath should be something like hdfs:///opt/teragrep/cfe_39/srv/topic_name/0.12345 where 12345 is offset and 0 the partition.
-        // These values should be fetched from config and other input parameters (topic+partition+offset).
+        // The values are fetched from config and input parameters (topic+partition+offset).
         path = config.getHdfsPath()+"/"+lastObject.topic;
         fileName = lastObject.partition+"."+lastObject.offset; // filename should be constructed from partition and offset.
 
-        // ====== Init HDFS File System Object
-        Configuration conf = new Configuration();
-        // Set FileSystem URI
-        conf.set("fs.defaultFS", hdfsuri);
-        // Because of Maven
-        conf.set("fs.hdfs.impl", DistributedFileSystem.class.getName());
-        conf.set("fs.file.impl", LocalFileSystem.class.getName());
+
         // Set HADOOP user here, Kerberus parameters most likely needs to be added here too.
-        System.setProperty("HADOOP_USER_NAME", "hdfs");
-        System.setProperty("hadoop.home.dir", "/");
+        System.setProperty("HADOOP_USER_NAME", "hdfs"); // TODO: Add to Config.java
+        System.setProperty("hadoop.home.dir", "/"); // TODO: Add to Config.java
+
+        // set kerberos host and realm
+        System.setProperty("java.security.krb5.realm", "DRB.COM"); // TODO: Add to Config.java
+        System.setProperty("java.security.krb5.kdc", "192.168.33.10"); // TODO: Add to Config.java
+
+        Configuration conf = new Configuration();
+
+        // enable kerberus
+        conf.set("hadoop.security.authentication", "kerberos"); // TODO: Add to Config.java
+        conf.set("hadoop.security.authorization", "true"); // TODO: Add to Config.java
+
+        conf.set("fs.defaultFS", "hdfs://192.168.33.10"); // Set FileSystem URI  // TODO: Add to Config.java
+        conf.set("fs.hdfs.impl", DistributedFileSystem.class.getName()); // Maven stuff?
+        conf.set("fs.file.impl", LocalFileSystem.class.getName()); // Maven stuff?
+
+        // hack for running locally with fake DNS records
+        // set this to true if overriding the host name in /etc/hosts
+        conf.set("dfs.client.use.datanode.hostname", "true");  // TODO: Add to Config.java
+
+        // server principal
+        // the kerberos principle that the namenode is using
+        conf.set("dfs.namenode.kerberos.principal.pattern", "hduser/*@DRB.COM");  // TODO: Add to Config.java
+
+        // set usergroup stuff
+        UserGroupInformation.setConfiguration(conf);
+        UserGroupInformation.loginUserFromKeytab("dbathgate@DRB.COM", "src/main/resources/dbathgate.keytab");  // TODO: Add to Config.java
+
         // filesystem for HDFS access is set here
-        try {
-            fs = FileSystem.get(URI.create(hdfsuri), conf);
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
+        fs = FileSystem.get(conf);
     }
 
     // Method for committing the AVRO-file to HDFS
@@ -80,6 +98,7 @@ public class HDFSWriter implements AutoCloseable{
         }
     }
 
+    // try-with-resources handles closing the filesystem automatically.
     public void close() {
         try {
             fs.close();
