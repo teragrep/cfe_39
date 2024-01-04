@@ -37,6 +37,15 @@ public class Config {
     private final String hdfsuri;
     private final String queueDirectory;
     private final String queueNamePrefix;
+    private final String kerberosHost;
+    private final String kerberosRealm;
+    private final String kerberosPrincipal;
+    private final String hadoopAuthentication;
+    private final String hadoopAuthorization;
+    private final String kerberosKeytabUser;
+    private final String kerberosKeytabPath;
+    private final String kerberosTestMode;
+
 
     Config() throws IOException {
         Properties properties = new Properties();
@@ -88,6 +97,16 @@ public class Config {
         // AVRO
         this.queueDirectory = properties.getProperty("queueDirectory", "");
         this.queueNamePrefix = properties.getProperty("queueNamePrefix", "");
+
+        // kerberos
+        this.kerberosHost = properties.getProperty("java.security.krb5.kdc", "");
+        this.kerberosRealm = properties.getProperty("java.security.krb5.realm", "");
+        this.hadoopAuthentication = properties.getProperty("hadoop.security.authentication", "");
+        this.hadoopAuthorization = properties.getProperty("hadoop.security.authorization", "");
+        this.kerberosPrincipal = properties.getProperty("dfs.namenode.kerberos.principal.pattern", "");
+        this.kerberosKeytabUser = properties.getProperty("KerberosKeytabUser", "");
+        this.kerberosKeytabPath = properties.getProperty("KerberosKeytabPath", "");
+        this.kerberosTestMode = properties.getProperty("dfs.client.use.datanode.hostname", "false");
 
 
         // kafka
@@ -184,5 +203,29 @@ public class Config {
 
     public int getCreatePartitionsInAdvanceHours() {
         return createPartitionsInAdvanceHours;
+    }
+    public String getKerberosHost() {
+        return kerberosHost;
+    }
+    public String getKerberosRealm() {
+        return kerberosRealm;
+    }
+    public String getKerberosPrincipal() {
+        return kerberosPrincipal;
+    }
+    public String getHadoopAuthentication() {
+        return hadoopAuthentication;
+    }
+    public String getHadoopAuthorization() {
+        return hadoopAuthorization;
+    }
+    public String getKerberosKeytabUser() {
+        return kerberosKeytabUser;
+    }
+    public String getKerberosKeytabPath() {
+        return kerberosKeytabPath;
+    }
+    public String getKerberosTestMode() {
+        return kerberosTestMode;
     }
 }

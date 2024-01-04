@@ -33,34 +33,34 @@ public class HDFSWriter implements AutoCloseable{
 
 
         // Set HADOOP user here, Kerberus parameters most likely needs to be added here too.
-        System.setProperty("HADOOP_USER_NAME", "hdfs"); // TODO: Add to Config.java
-        System.setProperty("hadoop.home.dir", "/"); // TODO: Add to Config.java
+        System.setProperty("HADOOP_USER_NAME", "hdfs"); // TODO: not needed because user authentication is done by kerberos?
+        System.setProperty("hadoop.home.dir", "/"); // TODO: not needed because user authentication is done by kerberos?
 
         // set kerberos host and realm
-        System.setProperty("java.security.krb5.realm", "DRB.COM"); // TODO: Add to Config.java
-        System.setProperty("java.security.krb5.kdc", "192.168.33.10"); // TODO: Add to Config.java
+        System.setProperty("java.security.krb5.realm", config.getKerberosRealm()); // DONE: Add to Config.java
+        System.setProperty("java.security.krb5.kdc", config.getKerberosHost()); // DONE: Add to Config.java
 
         Configuration conf = new Configuration();
 
         // enable kerberus
-        conf.set("hadoop.security.authentication", "kerberos"); // TODO: Add to Config.java
-        conf.set("hadoop.security.authorization", "true"); // TODO: Add to Config.java
+        conf.set("hadoop.security.authentication", config.getHadoopAuthentication()); // DONE: Add to Config.java
+        conf.set("hadoop.security.authorization", config.getHadoopAuthorization()); // DONE: Add to Config.java
 
-        conf.set("fs.defaultFS", "hdfs://192.168.33.10"); // Set FileSystem URI  // TODO: Add to Config.java
+        conf.set("fs.defaultFS", hdfsuri); // Set FileSystem URI
         conf.set("fs.hdfs.impl", DistributedFileSystem.class.getName()); // Maven stuff?
         conf.set("fs.file.impl", LocalFileSystem.class.getName()); // Maven stuff?
 
         // hack for running locally with fake DNS records
         // set this to true if overriding the host name in /etc/hosts
-        conf.set("dfs.client.use.datanode.hostname", "true");  // TODO: Add to Config.java
+        conf.set("dfs.client.use.datanode.hostname", config.getKerberosTestMode());  // DONE: Add to Config.java
 
         // server principal
         // the kerberos principle that the namenode is using
-        conf.set("dfs.namenode.kerberos.principal.pattern", "hduser/*@DRB.COM");  // TODO: Add to Config.java
+        conf.set("dfs.namenode.kerberos.principal.pattern", config.getKerberosPrincipal());  // DONE: Add to Config.java
 
         // set usergroup stuff
         UserGroupInformation.setConfiguration(conf);
-        UserGroupInformation.loginUserFromKeytab("dbathgate@DRB.COM", "src/main/resources/dbathgate.keytab");  // TODO: Add to Config.java
+        UserGroupInformation.loginUserFromKeytab(config.getKerberosKeytabUser(), config.getKerberosKeytabPath());  // DONE: Add to Config.java
 
         // filesystem for HDFS access is set here
         fs = FileSystem.get(conf);
