@@ -33,8 +33,8 @@ public class HDFSWriter implements AutoCloseable{
 
 
         // Set HADOOP user here, Kerberus parameters most likely needs to be added here too.
-        System.setProperty("HADOOP_USER_NAME", "hdfs"); // TODO: not needed because user authentication is done by kerberos?
-        System.setProperty("hadoop.home.dir", "/"); // TODO: not needed because user authentication is done by kerberos?
+        // System.setProperty("HADOOP_USER_NAME", "hdfs"); // TODO: not needed because user authentication is done by kerberos?
+        // System.setProperty("hadoop.home.dir", "/"); // TODO: not needed because user authentication is done by kerberos?
 
         // set kerberos host and realm
         System.setProperty("java.security.krb5.realm", config.getKerberosRealm()); // DONE: Add to Config.java
