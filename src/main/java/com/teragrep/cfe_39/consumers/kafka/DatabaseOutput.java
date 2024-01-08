@@ -71,8 +71,8 @@ public class DatabaseOutput implements Consumer<List<RecordOffsetObject>> {
         this.table = table;
         this.runtimeStatistics = runtimeStatistics;
         this.topicCounter = topicCounter;
-        this.minimumFreeSpace = 32000; // TODO: CHECK RIGHT VALUE FOR minimumFreeSpace
-        this.maximumFileSize = 64000; // TODO: CHECK RIGHT VALUE FOR maximumFileSize. Maximum file size should be 64M.
+        this.minimumFreeSpace = 32000000; // TODO: CHECK RIGHT VALUE FOR minimumFreeSpace
+        this.maximumFileSize = 64000000; // Maximum file size should be 64M (64000000).
 
         // queueDirectory and queueNamePrefix shouldn't be critical to name according to the HDFS requirements (topic+partition+offset for filename) as it's just used for storing the AVRO-serialized files.
         this.writableQueue = new WritableQueue(

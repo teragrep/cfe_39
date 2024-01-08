@@ -46,7 +46,10 @@ class SyslogAvroWriter implements AutoCloseable {
 
     void write(SyslogRecord syslogRecord) throws IOException{
         dataFileWriter.append(syslogRecord);
-        // dataFileWriter.flush(); // TODO: Avro files 'flush' must be called as few times as possible. Check memory usage impact. Use only automatic flush which is triggered when .close() is called?
+        dataFileWriter.flush(); // FIXME: getFileSize() doesn't work properly if dataFileWriter.flush() is not called after appending the new record to the AVRO-file.
+
+        // TODO: Avro files 'flush' must be called as few times as possible. Check memory usage impact. Use only automatic flush which is triggered when .close() is called.
+        //  To use the automatic flush AND have a working getFileSize(), the file size must be tracked separately. Approximate the file size by adding the original file size before any appending to the sum of record sizes.
     }
 
     public void close() throws IOException {
