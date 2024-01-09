@@ -41,24 +41,29 @@ public class KafkaConsumerTest {
         // Deserialize Users from disk
         Config config = new Config();
         Path queueDirectory = Paths.get(config.getQueueDirectory());
-        File syslogFile = new File(
-                queueDirectory.toAbsolutePath()
-                        + File.separator
-                        + config.getQueueNamePrefix()
-                        + "."
-                        + 1 // change value if there are more than one avro-file generated etc.
-        );;
         int counter = 0;
-        DatumReader<SyslogRecord> userDatumReader = new SpecificDatumReader<>(SyslogRecord.class);
-        try (DataFileReader<SyslogRecord> dataFileReader = new DataFileReader<>(syslogFile, userDatumReader)) {
-            SyslogRecord user = null;
-            while (dataFileReader.hasNext()) {
-                user = dataFileReader.next(user);
-                System.out.println(user);
-                counter++;
+        for (int i = 5; i<=6; i++) {
+            File syslogFile = new File(
+                    queueDirectory.toAbsolutePath()
+                            + File.separator
+                            + config.getQueueNamePrefix()
+                            + "."
+                            + i
+            );
+            DatumReader<SyslogRecord> userDatumReader = new SpecificDatumReader<>(SyslogRecord.class);
+            try (DataFileReader<SyslogRecord> dataFileReader = new DataFileReader<>(syslogFile, userDatumReader)) {
+                SyslogRecord user = null;
+                while (dataFileReader.hasNext()) {
+                    user = dataFileReader.next(user);
+                    System.out.println(user);
+                    counter++;
+                }
             }
         }
         System.out.println("Total number of records: " + counter);
+        // 1-2 (only close): 248878, filesize too small
+        // 3-4 (flush after append): 248878, filesize ok
+        // 5-6 (flush only before close) : 248878, filesize too small
     }
 
     @Test
