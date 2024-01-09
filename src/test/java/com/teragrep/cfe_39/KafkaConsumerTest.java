@@ -46,16 +46,19 @@ public class KafkaConsumerTest {
                         + File.separator
                         + config.getQueueNamePrefix()
                         + "."
-                        + 1
+                        + 1 // change value if there are more than one avro-file generated etc.
         );;
+        int counter = 0;
         DatumReader<SyslogRecord> userDatumReader = new SpecificDatumReader<>(SyslogRecord.class);
         try (DataFileReader<SyslogRecord> dataFileReader = new DataFileReader<>(syslogFile, userDatumReader)) {
             SyslogRecord user = null;
             while (dataFileReader.hasNext()) {
                 user = dataFileReader.next(user);
                 System.out.println(user);
+                counter++;
             }
         }
+        System.out.println("Total number of records: " + counter);
     }
 
     @Test

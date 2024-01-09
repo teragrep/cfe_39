@@ -60,6 +60,7 @@ public class DatabaseOutput implements Consumer<List<RecordOffsetObject>> {
     private final SDVector originHostname;
     private File syslogFile;
     private final Config config;
+    private long approximatedSize;
 
     DatabaseOutput(
             Config config,
@@ -72,7 +73,7 @@ public class DatabaseOutput implements Consumer<List<RecordOffsetObject>> {
         this.runtimeStatistics = runtimeStatistics;
         this.topicCounter = topicCounter;
         this.minimumFreeSpace = 32000000; // TODO: CHECK RIGHT VALUE FOR minimumFreeSpace
-        this.maximumFileSize = 64000000; // Maximum file size should be 64M (64000000).
+        this.maximumFileSize = 60800000; // Maximum file size should be 64M (64000000). 60800000 is 95% of 64M which is a good approximation point.
 
         // queueDirectory and queueNamePrefix shouldn't be critical to name according to the HDFS requirements (topic+partition+offset for filename) as it's just used for storing the AVRO-serialized files.
         this.writableQueue = new WritableQueue(
@@ -90,6 +91,7 @@ public class DatabaseOutput implements Consumer<List<RecordOffsetObject>> {
         this.eventNodeSourceHostname = new SDVector("event_node_source@48577","hostname");
         this.eventNodeRelayHostname = new SDVector("event_node_relay@48577","hostname");
         this.originHostname = new SDVector("origin@48577","hostname");
+        this.approximatedSize = 0;
     }
 
     boolean checkSizeTooLarge(long fileSize, RecordOffsetObject lastObject) {
@@ -111,6 +113,7 @@ public class DatabaseOutput implements Consumer<List<RecordOffsetObject>> {
                 File syslogFile =
                         writableQueue.getNextWritableFile();
                 syslogAvroWriter = new SyslogAvroWriter(syslogFile);
+                approximatedSize = syslogAvroWriter.getFileSize(); // resets the size approximation.
                 return true;
             }
         } catch (IOException ioException) {
@@ -158,15 +161,12 @@ public class DatabaseOutput implements Consumer<List<RecordOffsetObject>> {
                     //  And the content of the AVRO-serialized file that is going to be stored in HDFS is finalized only when the maximumFileSize has been reached.
                     //  This means the HDFS filename is only finalized when the AVRO-serialized file is finalized, because every Kafka-record added to the file is going to change the offset that is going to be used for the filename.
                     syslogAvroWriter = new SyslogAvroWriter(syslogFile);
+                    approximatedSize = syslogAvroWriter.getFileSize();  // resets the size approximation.
                 } catch (IOException ioException) {
                     throw new IllegalArgumentException(ioException);
                 }
             } else {
-                try {
-                    checkSizeTooLarge(syslogAvroWriter.getFileSize(), lastObject);
-                } catch (IOException ioException) {
-                    throw new UncheckedIOException(ioException);
-                }
+                checkSizeTooLarge(approximatedSize, lastObject);
             }
 
             byte[] byteArray = recordOffsetObject.record; // loads the byte[] contained in recordOffsetObject.record to byteArray.
@@ -218,16 +218,12 @@ public class DatabaseOutput implements Consumer<List<RecordOffsetObject>> {
 
                     // Calculate the size of syslogRecord that is going to be written to syslogAvroWriter-file.
                     long capacity = syslogRecord.toByteBuffer().capacity();
-                    long capacitybefore = syslogAvroWriter.getFileSize(); // TODO: NOT WORKING PROPERLY! DOESN'T GIVE THE RIGHT FILE SIZE
                     // Check if there is still room in syslogAvroWriter for another syslogRecord. Commit syslogAvroWriter to HDFS if no room left, emptying it out in the process.
-                    checkSizeTooLarge(syslogAvroWriter.getFileSize() + capacity, lastObject);
+                    checkSizeTooLarge(approximatedSize + capacity, lastObject);
                     // Add syslogRecord to syslogAvroWriter which has rooom for new syslogRecord.
                     syslogAvroWriter.write(syslogRecord);
-
-                    long capacityafter = syslogAvroWriter.getFileSize(); // TODO: NOT WORKING PROPERLY! DOESN'T GIVE THE RIGHT FILE SIZE
-                    System.out.println("record capacity: " + capacity);
-                    System.out.println("file capacity before adding record: " + capacitybefore);
-                    System.out.println("file capacity after adding record: " + capacityafter);
+                    approximatedSize += capacity;
+                    // The difference between actual and approximate file size is about 2,4 % with 64M files. So setting the MaximumFileSize to 95 % of the target should make things work.
 
 
                     /*new RFC5424Timestamp(rfc5424Frame.timestamp).toZonedDateTime().toInstant().getEpochSecond();
