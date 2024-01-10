@@ -73,7 +73,7 @@ public class DatabaseOutput implements Consumer<List<RecordOffsetObject>> {
         this.runtimeStatistics = runtimeStatistics;
         this.topicCounter = topicCounter;
         this.minimumFreeSpace = 32000000; // TODO: CHECK RIGHT VALUE FOR minimumFreeSpace
-        this.maximumFileSize = 60800000; // Maximum file size should be 64M (64000000). 60800000 is 95% of 64M which is a good approximation point.
+        this.maximumFileSize = config.getMaximumFileSize();; // Maximum file size should be 64M (64000000). 60800000 is 95% of 64M which is a good approximation point.
 
         // queueDirectory and queueNamePrefix shouldn't be critical to name according to the HDFS requirements (topic+partition+offset for filename) as it's just used for storing the AVRO-serialized files.
         this.writableQueue = new WritableQueue(
@@ -166,7 +166,12 @@ public class DatabaseOutput implements Consumer<List<RecordOffsetObject>> {
                     throw new IllegalArgumentException(ioException);
                 }
             } else {
-                checkSizeTooLarge(approximatedSize, lastObject);
+                // checkSizeTooLarge(approximatedSize, lastObject); // FIXME: approximatedSize is not working properly without the use of flush() after append. File sizes are all over the place.
+                try {
+                    checkSizeTooLarge(syslogAvroWriter.getFileSize(), lastObject);
+                } catch (IOException ioException) {
+                    throw new UncheckedIOException(ioException);
+                }
             }
 
             byte[] byteArray = recordOffsetObject.record; // loads the byte[] contained in recordOffsetObject.record to byteArray.
@@ -219,8 +224,9 @@ public class DatabaseOutput implements Consumer<List<RecordOffsetObject>> {
                     // Calculate the size of syslogRecord that is going to be written to syslogAvroWriter-file.
                     long capacity = syslogRecord.toByteBuffer().capacity();
                     // Check if there is still room in syslogAvroWriter for another syslogRecord. Commit syslogAvroWriter to HDFS if no room left, emptying it out in the process.
-                    checkSizeTooLarge(approximatedSize + capacity, lastObject);
-                    // Add syslogRecord to syslogAvroWriter which has rooom for new syslogRecord.
+                    // checkSizeTooLarge(approximatedSize + capacity, lastObject); // FIXME: approximatedSize is not working properly without the use of flush() after append. File sizes are all over the place.
+                    checkSizeTooLarge(syslogAvroWriter.getFileSize() + capacity, lastObject);
+                    // Add syslogRecord to syslogAvroWriter which has room for new syslogRecord.
                     syslogAvroWriter.write(syslogRecord);
                     approximatedSize += capacity;
                     // The difference between actual and approximate file size is about 2,4 % with 64M files. So setting the MaximumFileSize to 95 % of the target should make things work.

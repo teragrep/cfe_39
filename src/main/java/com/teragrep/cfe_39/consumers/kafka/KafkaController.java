@@ -56,11 +56,14 @@ public class KafkaController {
     private final List<Thread> threads = new ArrayList<>();
     private final Set<String> activeTopics = new HashSet<>();
     private final RuntimeStatistics runtimeStatistics = new RuntimeStatistics();
+    private boolean keepRunning;
+    private boolean useMockKafkaConsumer;
 
     public KafkaController(Config config) {
+        keepRunning = true;
         this.config = config;
         Properties readerKafkaProperties = config.getKafkaConsumerProperties();
-        boolean useMockKafkaConsumer = Boolean.parseBoolean(
+        this.useMockKafkaConsumer = Boolean.parseBoolean(
                 readerKafkaProperties.getProperty("useMockKafkaConsumer", "false")
         );
         if (useMockKafkaConsumer) {
@@ -85,14 +88,20 @@ public class KafkaController {
         );
         topicMetrics.register();
 
-        while (true) {
-            LOGGER.debug("Scanning for threads");
+        while (keepRunning) {
+            LOGGER.info("Scanning for threads");
             topicScan(durationStatistics, topicCounters);
 
             // log stuff
             durationStatistics.log();
             long topicScanDelay = 30000L;
             Thread.sleep(topicScanDelay);
+
+            if (durationStatistics.getTotalRecords() > 0 & useMockKafkaConsumer) {
+                LOGGER.info("Processed all the test records. Closing.");
+                keepRunning = false;
+            }
+
         }
     }
 

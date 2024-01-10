@@ -141,7 +141,7 @@ public class MockKafkaConsumerFactoryTemp {
     public static Consumer<byte[], byte[]> getConsumer() {
 
         LOGGER.warn("useMockKafkaConsumer is set, using MockKafkaConsumer");
-        int amountofloops = 17777; // number of loops for adding partitions/records to the mock consumer topic. Each loop adds a new partition of 14 records. 17777 loops results in file size slightly above 64M.
+        int amountofloops = 10; // number of loops for adding partitions/records to the mock consumer topic. Each loop adds a new partition of 14 records. 17777 loops results in file size slightly above 64M. 10 loops is sized at 36,102 bits.
         final MockConsumer<byte[], byte[]> consumer;
         consumer = new MockConsumer<>(OffsetResetStrategy.EARLIEST);
         List<TopicPartition> topicPartitions = new ArrayList<>();

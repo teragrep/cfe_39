@@ -45,6 +45,7 @@ public class Config {
     private final String kerberosKeytabUser;
     private final String kerberosKeytabPath;
     private final String kerberosTestMode;
+    private long maximumFileSize;
 
 
     Config() throws IOException {
@@ -121,6 +122,7 @@ public class Config {
             throw new IOException("File '" + loginConfig + "' set by java.security.auth.login.config does not exist");
         }
         System.setProperty("java.security.auth.login.config", loginConfig);
+        this.maximumFileSize = 60800000; // default value
 
         // Just for loggers to work
         Path log4j2Config = Paths.get(properties.getProperty("log4j2.configurationFile", System.getProperty("user.dir") + "/etc/log4j2.properties"));
@@ -227,5 +229,11 @@ public class Config {
     }
     public String getKerberosTestMode() {
         return kerberosTestMode;
+    }
+    public long getMaximumFileSize() {
+        return maximumFileSize;
+    }
+    public void setMaximumFileSize(long maximumFileSize) {
+        this.maximumFileSize = maximumFileSize;
     }
 }

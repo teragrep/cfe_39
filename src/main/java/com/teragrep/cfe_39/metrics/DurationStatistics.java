@@ -69,6 +69,11 @@ public class DurationStatistics {
         lastBytes = currentBytes;
     }
 
+    public long getTotalRecords() {
+        long test = records.getReader().get();
+        return test;
+    }
+
     public void log() {
         LOGGER.info(
                 "## TOTAL records <" + records.getReader().get() + "> " +
