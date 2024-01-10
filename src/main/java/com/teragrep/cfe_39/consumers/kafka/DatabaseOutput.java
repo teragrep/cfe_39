@@ -25,9 +25,7 @@ import java.net.URI;
 //  The kafka stream should first be deserialized using rlo_06 and then serialized again using avro and stored in HDFS.
 //  The target where the record is stored in HDFS is based on the topic, partition and offset. ie. topic_name/0.123456 where offset is 123456
 
-// TODO: make testcases using MockKafkaConsumerFactory. The mock consumer is activated for testing using the configuration file: readerKafkaProperties.getProperty("useMockKafkaConsumer", "false")
-// DONE:
-// Thus the configuration file is the first thing to make for testcases, and the first testcases are for testing the configuration file.
+// The mock consumer is activated for testing using the configuration file: readerKafkaProperties.getProperty("useMockKafkaConsumer", "false")
 
 public class DatabaseOutput implements Consumer<List<RecordOffsetObject>> {
     private static final Logger LOGGER = LoggerFactory.getLogger(DatabaseOutput.class);
@@ -102,12 +100,9 @@ public class DatabaseOutput implements Consumer<List<RecordOffsetObject>> {
 
                 // This part closes the writing of now "complete" AVRO-file and stores the file to HDFS.
                 syslogAvroWriter.close();
-                // TODO: RESTORE COMMENT BLOCK AFTER TESTING AVRO.
-                /*try (HDFSWriter writer = new HDFSWriter(config, lastObject)) {
+                try (HDFSWriter writer = new HDFSWriter(config, lastObject)) {
                     writer.commit(syslogFile); // commits the final AVRO-file to HDFS.
                 }
-                syslogFile.delete(); // Delete AVRO-files that have been committed to HDFS
-                */
 
                 // This part defines a new empty file to which the new AVRO-serialized records are stored until it again hits the 64M size limit.
                 File syslogFile =
@@ -246,12 +241,9 @@ public class DatabaseOutput implements Consumer<List<RecordOffsetObject>> {
         try {
             if (syslogAvroWriter != null) {
                 syslogAvroWriter.close();
-                // TODO: RESTORE COMMENT BLOCK AFTER TESTING AVRO.
-                /*try (HDFSWriter writer = new HDFSWriter(config, lastObject)) {
+                try (HDFSWriter writer = new HDFSWriter(config, lastObject)) {
                     writer.commit(syslogFile); // commits the final AVRO-file to HDFS.
                 }
-                syslogFile.delete(); // Delete AVRO-files that have been committed to HDFS
-                */
             }
         } catch (IOException e) {
             throw new RuntimeException(e);

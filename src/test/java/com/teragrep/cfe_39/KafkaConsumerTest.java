@@ -39,7 +39,7 @@ public class KafkaConsumerTest {
 
 
     @Test
-    public void avroFullTest() throws InterruptedException {
+    public void kafkaAndAvroFullTest() throws InterruptedException {
         Config config = null;
         try {
             config = new Config();
