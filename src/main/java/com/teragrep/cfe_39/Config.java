@@ -47,6 +47,7 @@ public class Config {
     private final String kerberosTestMode;
     private long maximumFileSize;
 
+    // TODO: Set up configuration check for important parameters.
 
     Config() throws IOException {
         Properties properties = new Properties();

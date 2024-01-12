@@ -89,7 +89,7 @@ public class KafkaController {
         topicMetrics.register();
 
         while (keepRunning) {
-            LOGGER.info("Scanning for threads");
+            LOGGER.debug("Scanning for threads");
             topicScan(durationStatistics, topicCounters);
 
             // log stuff
