@@ -50,7 +50,7 @@ public class KafkaConsumerTest {
             System.out.println("Got invalid config: " + e);
             System.exit(1);
         }
-        config.setMaximumFileSize(8000); // 10 loops (140 records) are in use at the moment, and that is sized at 36,102 bits.
+        config.setMaximumFileSize(8500); // 10 loops (140 records) are in use at the moment, and that is sized at 36,102 bits.
         KafkaController kafkaController = new KafkaController(config);
         kafkaController.run();
         try {

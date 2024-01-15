@@ -12,6 +12,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.*;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.ZonedDateTime;
 import java.util.List;
@@ -100,9 +101,9 @@ public class DatabaseOutput implements Consumer<List<RecordOffsetObject>> {
 
                 // This part closes the writing of now "complete" AVRO-file and stores the file to HDFS.
                 syslogAvroWriter.close();
-                try (HDFSWriter writer = new HDFSWriter(config, lastObject)) {
+                /*try (HDFSWriter writer = new HDFSWriter(config, lastObject)) {
                     writer.commit(syslogFile); // commits the final AVRO-file to HDFS.
-                }
+                }*/
 
                 // This part defines a new empty file to which the new AVRO-serialized records are stored until it again hits the 64M size limit.
                 File syslogFile =
@@ -209,10 +210,10 @@ public class DatabaseOutput implements Consumer<List<RecordOffsetObject>> {
                             .setDirectory(rfc5424Frame.structuredData.getValue(teragrepDirectory).toString())
                             .setStream(rfc5424Frame.structuredData.getValue(teragrepStreamName).toString()) // Or is sourcetype/stream supposed to be rfc5424Frame.appName.toString() instead?
                             .setHost(rfc5424Frame.hostname.toString())
-                            .setInput(source.toString())
+                            .setInput(new String(source, StandardCharsets.UTF_8))
                             .setPartition(recordOffsetObject.partition.toString())
                             .setOffset(recordOffsetObject.offset)
-                            .setOrigin(origin.toString())
+                            .setOrigin(new String(origin, StandardCharsets.UTF_8))
                             .build();
 
 
@@ -241,9 +242,9 @@ public class DatabaseOutput implements Consumer<List<RecordOffsetObject>> {
         try {
             if (syslogAvroWriter != null) {
                 syslogAvroWriter.close();
-                try (HDFSWriter writer = new HDFSWriter(config, lastObject)) {
+                /*try (HDFSWriter writer = new HDFSWriter(config, lastObject)) {
                     writer.commit(syslogFile); // commits the final AVRO-file to HDFS.
-                }
+                }*/
             }
         } catch (IOException e) {
             throw new RuntimeException(e);

@@ -47,12 +47,6 @@
         </plugins>
     </build>
     <dependencies>
-        <!-- mxj_01 is having access issues, error 403 -->
-        <!--<dependency>
-            <groupId>com.teragrep</groupId>
-            <artifactId>mxj_01</artifactId>
-            <version>1.0.3</version>
-        </dependency>-->
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter-engine</artifactId>
