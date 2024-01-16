@@ -4,7 +4,7 @@ import com.teragrep.cfe_39.Config;
 import com.teragrep.cfe_39.avro.SyslogRecord;
 import com.teragrep.cfe_39.consumers.kafka.queue.WritableQueue;
 import com.teragrep.cfe_39.metrics.topic.TopicCounter;
-import com.teragrep.cfe_39.metrics.RuntimeStatistics;
+import com.teragrep.cfe_39.metrics.DurationStatistics;
 import com.teragrep.rlo_06.*;
 import org.apache.hadoop.fs.*;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
@@ -35,7 +35,7 @@ public class DatabaseOutput implements Consumer<List<RecordOffsetObject>> {
     private final String table;
 
 
-    private final RuntimeStatistics runtimeStatistics;
+    private final DurationStatistics durationStatistics;
     private final TopicCounter topicCounter;
 
     private long lastTimeCalled = Instant.now().toEpochMilli();
@@ -64,12 +64,12 @@ public class DatabaseOutput implements Consumer<List<RecordOffsetObject>> {
     DatabaseOutput(
             Config config,
             String table,
-            RuntimeStatistics runtimeStatistics,
+            DurationStatistics durationStatistics,
             TopicCounter topicCounter
     ) {
         this.config = config;
         this.table = table;
-        this.runtimeStatistics = runtimeStatistics;
+        this.durationStatistics = durationStatistics;
         this.topicCounter = topicCounter;
         this.minimumFreeSpace = 32000000; // TODO: CHECK RIGHT VALUE FOR minimumFreeSpace
         this.maximumFileSize = config.getMaximumFileSize();; // Maximum file size should be 64M (64000000). 60800000 is 95% of 64M which is a good approximation point.
@@ -265,8 +265,8 @@ public class DatabaseOutput implements Consumer<List<RecordOffsetObject>> {
         long bps = batchBytes * 1000 / took;
         topicCounter.setBytesPerSecond(bps);
 
-        runtimeStatistics.addAndGetRecords(recordOffsetObjectList.size());
-        runtimeStatistics.addAndGetBytes(batchBytes);
+        durationStatistics.addAndGetRecords(recordOffsetObjectList.size()); // TODO: Change to dropwizard instead
+        durationStatistics.addAndGetBytes(batchBytes); // TODO: Change to dropwizard instead
 
         topicCounter.addToTotalBytes(batchBytes);
         topicCounter.addToTotalRecords(recordOffsetObjectList.size());

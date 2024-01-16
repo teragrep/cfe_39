@@ -1,10 +1,6 @@
 package com.teragrep.cfe_39.metrics.topic;
 
-import com.teragrep.cfe_39.metrics.mxj.MXJEndpoint;
-// FIXME
-/*import com.teragrep.mxj_01.CompositeDataWriter;
-import com.teragrep.mxj_01.DynamicBean;
-import com.teragrep.mxj_01.TabularDataWriter; */
+// TODO: Add dropwizard metrics implementation to replace old mxj_01 implementation.
 
 import javax.management.*;
 import java.util.List;

@@ -1,6 +1,7 @@
 package com.teragrep.cfe_39.consumers.kafka;
 
-
+import com.codahale.metrics.MetricRegistry;
+import com.codahale.metrics.SharedMetricRegistries;
 import com.teragrep.cfe_39.Config;
 import com.teragrep.cfe_39.metrics.*;
 import com.teragrep.cfe_39.metrics.topic.TopicCounter;
@@ -55,9 +56,10 @@ public class KafkaController {
     private final org.apache.kafka.clients.consumer.Consumer<byte[], byte[]> kafkaConsumer;
     private final List<Thread> threads = new ArrayList<>();
     private final Set<String> activeTopics = new HashSet<>();
-    private final RuntimeStatistics runtimeStatistics = new RuntimeStatistics();
+    private final DurationStatistics durationStatistics = new DurationStatistics();
     private boolean keepRunning;
     private boolean useMockKafkaConsumer;
+    // private final MetricRegistry metricRegistry = new MetricRegistry();
 
     public KafkaController(Config config) {
         keepRunning = true;
@@ -74,12 +76,9 @@ public class KafkaController {
     }
 
     public void run() throws InterruptedException {
-        // register runtime statistics
-        // runtimeStatistics.register(); // FIXME
 
         // register duration statistics
-        DurationStatistics durationStatistics = new DurationStatistics();
-        // durationStatistics.register(); // FIXME
+        durationStatistics.register(); // FIXME
 
         // register per topic counting
         List<TopicCounter> topicCounters = new CopyOnWriteArrayList<>();
@@ -119,7 +118,7 @@ public class KafkaController {
         Consumer<List<RecordOffsetObject>> output = new DatabaseOutput(
                 config, // Configuration settings
                 topic, // String, the name of the topic
-                runtimeStatistics, // RuntimeStatistics object from metrics
+                durationStatistics, // RuntimeStatistics object from metrics
                 topicCounter // TopicCounter object from metrics
         );
 
@@ -164,13 +163,13 @@ public class KafkaController {
             try {
                 createReader(topic, topicCounters);
                 activeTopics.add(topic);
-                runtimeStatistics.addAndGetThreads(1);
+                durationStatistics.addAndGetThreads(1);
             }
             catch (SQLException sqlException) {
                 LOGGER.error("Topic <"+topic+"> not activated due to reader creation error: " + sqlException);
             }
         }
-        durationStatistics.report(runtimeStatistics);
+        durationStatistics.report();
     }
 
 }
