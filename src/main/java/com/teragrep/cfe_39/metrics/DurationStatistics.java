@@ -20,54 +20,52 @@ public class DurationStatistics {
     private Instant lastReportTime = Instant.now();
     private long lastBytes = 0L;
     private long lastRecords = 0L;
-    private final Counter samplingIntervalStatTemp = new Counter();
-    private final Meter recordsPerSecondStatTemp = new Meter();
-    private final Meter bytesPerSecondStatTemp = new Meter();
-    private final Counter recordsTemp = new Counter();
-    private final Counter bytesTemp = new Counter();
-    private final Meter threadsStatTemp = new Meter();
-    private final Meter bytesStatTemp = new Meter();
-    private final Meter recordsStatTemp = new Meter();
+    private final Counter samplingIntervalStat = new Counter();
+    private final Meter recordsPerSecondStat = new Meter();
+    private final Meter bytesPerSecondStat = new Meter();
+    private final Counter records = new Counter();
+    private final Counter bytes = new Counter();
+    private final Meter threadsStat = new Meter();
+    private final Meter bytesStat = new Meter();
+    private final Meter recordsStat = new Meter();
 
     public MetricRegistry register() {
-        // TODO: Register the different metrics to metricRegistry here.
-        metricRegistry.register("samplingIntervalStat", samplingIntervalStatTemp);
-        metricRegistry.register("recordsPerSecondStat", recordsPerSecondStatTemp);
-        metricRegistry.register("bytesPerSecondStat", bytesPerSecondStatTemp);
-        metricRegistry.register("records", recordsTemp);
-        metricRegistry.register("bytes", bytesTemp);
-        metricRegistry.register("threadsStat", threadsStatTemp);
-        metricRegistry.register("bytesStat", bytesStatTemp);
-        metricRegistry.register("recordsStat", recordsStatTemp);
+        // Register the different metrics to metricRegistry here.
+        metricRegistry.register("samplingIntervalStat", samplingIntervalStat);
+        metricRegistry.register("recordsPerSecondStat", recordsPerSecondStat);
+        metricRegistry.register("bytesPerSecondStat", bytesPerSecondStat);
+        metricRegistry.register("records", records);
+        metricRegistry.register("bytes", bytes);
+        metricRegistry.register("threadsStat", threadsStat);
+        metricRegistry.register("bytesStat", bytesStat);
+        metricRegistry.register("recordsStat", recordsStat);
         return metricRegistry;
     }
 
-    // TODO: Alter the function like in RunTimeStatistics, so the class is only using dropwizard instead of mxj_01
     public void report() {
         long currentRecords = addAndGetRecords(0); // gets the total number of records processed during the current loop AND the previous loops.
-        System.out.println("currentRecords: "+currentRecords);
         long currentBytes = addAndGetBytes(0);// gets the total amount of bytes processed during the current loop AND the previous loops.
 
         // Check if new records were processed
         if (currentRecords > lastRecords) {
-            recordsTemp.inc(currentRecords - lastRecords); // new records found, adding the number of records to recordsTemp.
+            records.inc(currentRecords - lastRecords); // new records found, adding the number of records to records.
         }else {
-            long current = recordsTemp.getCount();
-            recordsTemp.dec(current); // no new records so set the counter back to 0.
+            long current = records.getCount();
+            records.dec(current); // no new records so set the counter back to 0.
         }
         if (currentBytes > lastBytes) {
-            bytesTemp.inc(currentBytes - lastBytes); // new records found, adding the number of records to recordsTemp.
+            bytes.inc(currentBytes - lastBytes); // new records found, adding the number of records to records.
         }else {
-            long current = bytesTemp.getCount();
-            bytesTemp.dec(current); // no new records so set the counter back to 0.
+            long current = bytes.getCount();
+            bytes.dec(current); // no new records so set the counter back to 0.
         }
 
         Instant currentTime = Instant.now();
         long took = currentTime.toEpochMilli() - lastReportTime.toEpochMilli();
-        samplingIntervalStatTemp.inc(took);
+        samplingIntervalStat.inc(took);
 
-        recordsPerSecondStatTemp.mark(currentRecords-lastRecords);
-        bytesPerSecondStatTemp.mark(currentBytes-lastBytes);
+        recordsPerSecondStat.mark(currentRecords-lastRecords);
+        bytesPerSecondStat.mark(currentBytes-lastBytes);
 
         // persist
         lastReportTime = currentTime;
@@ -76,34 +74,34 @@ public class DurationStatistics {
     }
 
     public long getTotalRecords() {
-        return recordsTemp.getCount();
+        return records.getCount();
     }
 
     public void log() {
         LOGGER.info(
-                "## Processed records <" + recordsTemp.getCount() + "> " +
-                        "and size <" + bytesTemp.getCount() / 1024 + "> KB " +
-                        "during <" + samplingIntervalStatTemp.getCount() + "> ms / " +
-                        "Rates for past minute: <" + recordsPerSecondStatTemp.getOneMinuteRate() + "> RPS. " +
-                        "<" + bytesPerSecondStatTemp.getOneMinuteRate() / 1024 + "> KB/s "
+                "## Processed records <" + records.getCount() + "> " +
+                        "and size <" + bytes.getCount() / 1024 + "> KB " +
+                        "during <" + samplingIntervalStat.getCount() + "> ms / " +
+                        "Metrics for the preceding minute: <" + recordsPerSecondStat.getOneMinuteRate() + "> RPS. " +
+                        "<" + bytesPerSecondStat.getOneMinuteRate() / 1024 + "> KB/s "
         );
-        samplingIntervalStatTemp.dec(samplingIntervalStatTemp.getCount());
+        samplingIntervalStat.dec(samplingIntervalStat.getCount());
     }
     public long addAndGetThreads(long delta) {
-        threadsStatTemp.mark(delta);
-        return threadsStatTemp.getCount();
+        threadsStat.mark(delta);
+        return threadsStat.getCount();
         // return threadsStat.getAtomicLong().addAndGet(delta);
     }
 
     public long addAndGetBytes(long delta) {
-        bytesStatTemp.mark(delta);
-        return bytesStatTemp.getCount();
+        bytesStat.mark(delta);
+        return bytesStat.getCount();
         // return bytesStat.getAtomicLong().addAndGet(delta);
     }
 
     public long addAndGetRecords(long delta) {
-        recordsStatTemp.mark(delta);
-        return recordsStatTemp.getCount();
+        recordsStat.mark(delta);
+        return recordsStat.getCount();
         // return recordsStat.getAtomicLong().addAndGet(delta);
     }
 }

@@ -1,13 +1,10 @@
 package com.teragrep.cfe_39.consumers.kafka;
 
-import com.codahale.metrics.MetricRegistry;
-import com.codahale.metrics.SharedMetricRegistries;
 import com.teragrep.cfe_39.Config;
 import com.teragrep.cfe_39.metrics.*;
 import com.teragrep.cfe_39.metrics.topic.TopicCounter;
 import com.teragrep.cfe_39.metrics.topic.TopicStatistics;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
-import org.apache.kafka.clients.consumer.MockConsumer;
 import org.apache.kafka.common.PartitionInfo;
 import org.apache.kafka.common.serialization.ByteArrayDeserializer;
 import org.slf4j.Logger;
@@ -78,7 +75,7 @@ public class KafkaController {
     public void run() throws InterruptedException {
 
         // register duration statistics
-        durationStatistics.register(); // FIXME
+        durationStatistics.register(); // FIXED?
 
         // register per topic counting
         List<TopicCounter> topicCounters = new CopyOnWriteArrayList<>();
