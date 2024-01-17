@@ -145,8 +145,8 @@ public class MockKafkaConsumerFactoryTemp {
         final MockConsumer<byte[], byte[]> consumer;
         consumer = new MockConsumer<>(OffsetResetStrategy.EARLIEST);
         List<TopicPartition> topicPartitions = new ArrayList<>();
-        HashMap<TopicPartition, Long> beginningOffsets = new HashMap<>();
-        HashMap<TopicPartition, Long> endOffsets = new HashMap<>();
+        LinkedHashMap<TopicPartition, Long> beginningOffsets = new LinkedHashMap<>();
+        LinkedHashMap<TopicPartition, Long> endOffsets = new LinkedHashMap<>();
         List<PartitionInfo> mockPartitionInfo = new ArrayList<>();
         // generate the topic partitions and metadata first
         for (int i = 0; i < amountofloops; i++) {
@@ -156,12 +156,13 @@ public class MockKafkaConsumerFactoryTemp {
             endOffsets.put(topicPartition, 14L);
             mockPartitionInfo.add(new PartitionInfo("testConsumerTopic", i, null, null, null));
         }
-        consumer.assign(topicPartitions);
+        consumer.assign(topicPartitions); // FIXME: The ordering of the assignment is wrong. Change consumer settings?
+        Set<TopicPartition> checkAssignmentOder = consumer.assignment(); // for testing only
         consumer.updateBeginningOffsets(beginningOffsets);
 
         //insert stuff
         for (TopicPartition a : topicPartitions) {
-            generateEvents(consumer, a.topic(), a.partition());
+            generateEvents(consumer, a.topic(), a.partition()); // The ordering in this loop is fine, goes from 0 to 9 in correct order.
         }
 
         consumer.updateEndOffsets(endOffsets);

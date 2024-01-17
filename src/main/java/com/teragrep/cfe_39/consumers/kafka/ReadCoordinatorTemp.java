@@ -36,7 +36,7 @@ public class ReadCoordinatorTemp implements Runnable {
 
         org.apache.kafka.clients.consumer.Consumer<byte[], byte[]> kafkaConsumer;
         if (useMockKafkaConsumer) {
-            kafkaConsumer = MockKafkaConsumerFactoryTemp.getConsumer();
+            kafkaConsumer = MockKafkaConsumerFactoryTemp.getConsumer(); // FIXME: PARTITIONS ARE IN WRONG ORDER IN kafkaConsumer, 7856341209. Should be 0123456789 or in reverse. This is clearly the point of origin for the issue as the AVRO-file contents are in identical (wrong) order.
         } else {
             kafkaConsumer = new KafkaConsumer<>(readerKafkaProperties, new ByteArrayDeserializer(), new ByteArrayDeserializer());
             kafkaConsumer.subscribe(Collections.singletonList(topic));
