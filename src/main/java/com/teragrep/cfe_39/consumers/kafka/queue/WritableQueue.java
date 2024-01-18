@@ -11,14 +11,13 @@ import java.util.stream.Stream;
 
 public class WritableQueue {
     private final Path queueDirectory;
-    private final String queueNamePrefix;
+    private String queueNamePrefix;
 
     public WritableQueue(
-            String queueDirectory,
-            String queueNamePrefix
+            String queueDirectory
     ) {
         this.queueDirectory = Paths.get(queueDirectory);
-        this.queueNamePrefix = queueNamePrefix;
+        this.queueNamePrefix = "";
         QueueUtilities.accessCheck(this.queueDirectory);
     }
 
@@ -53,6 +52,14 @@ public class WritableQueue {
     }
 
     public File getNextWritableFile() throws IOException {
-        return getNextWritableFilename();
+        if (queueNamePrefix.isEmpty()){
+            throw new IOException("No queueNamePrefix set");
+        }else {
+            return getNextWritableFilename();
+        }
+    }
+
+    public void setQueueNamePrefix(String a) {
+        this.queueNamePrefix = a;
     }
 }

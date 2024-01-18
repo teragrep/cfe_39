@@ -156,8 +156,7 @@ public class MockKafkaConsumerFactoryTemp {
             endOffsets.put(topicPartition, 14L);
             mockPartitionInfo.add(new PartitionInfo("testConsumerTopic", i, null, null, null));
         }
-        consumer.assign(topicPartitions); // FIXME: The ordering of the assignment is wrong. Change consumer settings?
-        Set<TopicPartition> checkAssignmentOder = consumer.assignment(); // for testing only
+        consumer.assign(topicPartitions);
         consumer.updateBeginningOffsets(beginningOffsets);
 
         //insert stuff
