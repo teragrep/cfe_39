@@ -44,7 +44,7 @@ public class KafkaConsumerTest {
     }
 
 
-    // @Test
+    @Test
     public void kafkaAndAvroFullTest() throws InterruptedException {
         Config config = null;
         try {
@@ -56,11 +56,11 @@ public class KafkaConsumerTest {
             System.out.println("Got invalid config: " + e);
             System.exit(1);
         }
-        config.setMaximumFileSize(8500); // 10 loops (140 records) are in use at the moment, and that is sized at 36,102 bits.
+        config.setMaximumFileSize(3000); // 10 loops (140 records) are in use at the moment, and that is sized at 36,102 bits.
         KafkaController kafkaController = new KafkaController(config);
         kafkaController.run();
         try {
-            int counter = avroReader(1, 5);
+            int counter = avroReader(1, 2);
             Assertions.assertEquals(140, counter);
         } catch (IOException e) {
             throw new RuntimeException(e);
@@ -75,24 +75,26 @@ public class KafkaConsumerTest {
         Path queueDirectory = Paths.get(config.getQueueDirectory());
         int counter = 0;
         int looper = 0;
-        for (int i = start; i<=end; i++) {
-            File syslogFile = new File(
-                    queueDirectory.toAbsolutePath()
-                            + File.separator
-                            + config.getQueueNamePrefix()
-                            + "."
-                            + i
-            );
-            DatumReader<SyslogRecord> userDatumReader = new SpecificDatumReader<>(SyslogRecord.class);
-            try (DataFileReader<SyslogRecord> dataFileReader = new DataFileReader<>(syslogFile, userDatumReader)) {
-                SyslogRecord user = null;
-                int partitionCounter = 9; // The partitions are indexed from 0 to 9 when 10 loops are used in MockKafkaConsumerFactoryTemp.
-                while (dataFileReader.hasNext()) {
-                    user = dataFileReader.next(user);
-                    System.out.println(syslogFile.getPath());
-                    System.out.println(user);
-                    counter++;
-                    // All the mock data is generated from a set of 14 records.
+        for (int j = 0; j <= 9; j++) {
+            for (int i = start; i <= end; i++) {
+                File syslogFile = new File(
+                        queueDirectory.toAbsolutePath()
+                                + File.separator
+                                + "testConsumerTopic"
+                                + j
+                                + "."
+                                + i
+                );
+                DatumReader<SyslogRecord> userDatumReader = new SpecificDatumReader<>(SyslogRecord.class);
+                try (DataFileReader<SyslogRecord> dataFileReader = new DataFileReader<>(syslogFile, userDatumReader)) {
+                    SyslogRecord user = null;
+                    int partitionCounter = 9; // The partitions are indexed from 0 to 9 when 10 loops are used in MockKafkaConsumerFactoryTemp.
+                    while (dataFileReader.hasNext()) {
+                        user = dataFileReader.next(user);
+                        System.out.println(syslogFile.getPath());
+                        System.out.println(user);
+                        counter++;
+                        // All the mock data is generated from a set of 14 records.
                     /*if (looper <= 0) {
                         // FIXME: The partition ordering is wrong in kafkaconsumer. Must be fixed so the avro serialization works properly with correct filenames for HDFS.
                         Assertions.assertEquals("{\"timestamp\": 1650872090804000, \"message\": \"[WARN] 2022-04-25 07:34:50,804 com.teragrep.jla_02.Log4j Log - Log4j warn says hi!\", \"directory\": \"jla02logger\", \"stream\": \"test:jla02logger:0\", \"host\": \"jla-02.default\", \"input\": \"imrelp:cfe-06-0.cfe-06.default:\", \"partition\": \""+partitionCounter+"\", \"offset\": 0, \"origin\": \"jla-02.default\"}", user.toString());
@@ -138,6 +140,7 @@ public class KafkaConsumerTest {
                         looper = 0;
                         partitionCounter--;
                     }*/
+                    }
                 }
             }
         }
@@ -148,15 +151,14 @@ public class KafkaConsumerTest {
     // @Test
     public void debugger() {
 
-
-        /*try {
-            int counter = avroReader(1, 5);
+        try {
+            int counter = avroReader(1, 2);
             Assertions.assertEquals(140, counter);
         } catch (IOException e) {
             throw new RuntimeException(e);
-        }*/
+        }
 
-        // TODO: DEBUG THE PARTITION ORDER!
+        /*// TODO: DEBUG THE PARTITION ORDER!
         // rewrite the key values for mock data generation.
 
         int amountofloops = 10; // number of loops for adding partitions/records to the mock consumer topic. Each loop adds a new partition of 14 records. 17777 loops results in file size slightly above 64M. 10 loops is sized at 36,102 bits.
@@ -197,7 +199,7 @@ public class KafkaConsumerTest {
         for (TopicPartition a : checkAssignmentOder) {
             Assertions.assertEquals(new TopicPartition("testConsumerTopic", looper), a);
             looper++;
-        }
+        }*/
 
 
 
