@@ -151,13 +151,15 @@ public class MockKafkaConsumerFactoryTemp {
         consumer.updateBeginningOffsets(beginningOffsets);
 
         //insert stuff
-        consumer.rebalance(topicPartitions); // subscribe
+        consumer.rebalance(topicPartitions); // needed for subscribe
         for (TopicPartition a : topicPartitions) {
-            generateEvents(consumer, a.topic(), a.partition()); // The ordering in this loop is fine, goes from 0 to 9 in correct order.
+            generateEvents(consumer, a.topic(), a.partition());
         }
 
         consumer.updateEndOffsets(endOffsets);
         consumer.updatePartitions("testConsumerTopic", mockPartitionInfo);
         return consumer;
+        // TODO: Check how to implement consumer group in mockconsumer. The mockconsumer has consumer.groupMetadata() method available so it should be possible even though its not thread safe.
+        //  The code for starting consumers in separate threads is located in KafkaController.java line 132.
     }
 }

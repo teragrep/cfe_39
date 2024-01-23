@@ -102,7 +102,7 @@ public class KafkaController {
     }
 
     // Creates kafka topic consumer based on input parameters.
-    private void createReader(String topic, List<TopicCounter> topicCounters) throws SQLException {
+    private void createReader(String topic, List<PartitionInfo> listPartitionInfo, List<TopicCounter> topicCounters) throws SQLException {
 
         // Create a new topicCounter object for the topic that has not been added to topicCounters-list yet.
         TopicCounter topicCounter = new TopicCounter(topic);
@@ -126,24 +126,44 @@ public class KafkaController {
                 config.getKafkaConsumerProperties(),
                 output
         );
+        long totalRecords = topicCounter.getTotalRecords();
+
+//        Thread readThread = new Thread(null, readCoordinator, topic); // Starts the thread with readCoordinator that creates the consumer and subscribes to the topic.
+//        threads.add(readThread);
+//        readThread.start(); // Starts the thread, in other words proceeds to call run() function of ReadCoordinator.
+
 
         // Every consumer is run in a separate thread.
-        Thread readThread = new Thread(null, readCoordinator, topic);
-        threads.add(readThread);
-        readThread.start();
+        // FIXME: Exception in thread "testConsumerTopic" java.nio.channels.OverlappingFileLockException. The cause is that the consumers are accessing the same partition for some reason when the partitions are supposed to be assigned to a single consumer.
+        //  In other words the consumers are trying to store records to the same AVRO-file. The problem us most likely in the mock consumer side. That thing is confusing when trying to implement consumer groups.
+        int numOfThreads = Math.min(1, listPartitionInfo.size()); // Makes sure that more consumers are not assigned to the topic than there are partitions available on the topic.
+        for (int testi = 1; numOfThreads >= testi; testi++) {
+            Thread readThread = new Thread(null, readCoordinator, topic); // Starts the thread with readCoordinator that creates the consumer and subscribes to the topic.
+            threads.add(readThread);
+            readThread.start(); // Starts the thread, in other words proceeds to call run() function of ReadCoordinator.
+        }
+
     }
 
     private void topicScan(DurationStatistics durationStatistics, List<TopicCounter> topicCounters) {
         Map<String, List<PartitionInfo>> listTopics = kafkaConsumer.listTopics(Duration.ofSeconds(60)); // Topics can be fetched from mock consumer if the consumer has been updated separately with the partition info.
         Pattern topicsRegex = Pattern.compile(config.getQueueTopicPattern()); // Mock consumer has the partitions in this format: queueTopicPattern=^testConsumerTopic-*$
-
         // Find the topics available in Kafka based on given QueueTopicPattern, both active and in-active.
         // Check how partitions are handled, need to allow using consumer groups for partition read assignments. aka. load balancing
         Set<String> foundTopics = new HashSet<>();
+
+        // TODO: 1. Add functionality so the partition information is also fetched for the queried topics. At the moment only the topic names are fetched.
+        Map<String, List<PartitionInfo>> foundPartitions = new HashMap<>();
+
+
         for (Map.Entry<String, List<PartitionInfo>> entry : listTopics.entrySet()) {
             Matcher matcher = topicsRegex.matcher(entry.getKey());
             if (matcher.matches()) {
                 foundTopics.add(entry.getKey());
+
+                // TODO: 2. Add functionality so the partition information is also fetched for the queried topics. At the moment only the topic names are fetched.
+                foundPartitions.put(entry.getKey(), entry.getValue());
+
             }
         }
 
@@ -153,9 +173,27 @@ public class KafkaController {
 
         // subtract currently active topics from found topics
         foundTopics.removeAll(activeTopics);
+        // TODO: 3. Subtract currently active partitions from found partitions
+        for (String topic_name : activeTopics) {
+            foundPartitions.remove(topic_name); // removes the partitions from the list based on the topic name.
+        }
+
+
+        // TODO: Activate all the found in-active topics, in other words create individual consumers for all of them using the createReader()-function.
+        foundPartitions.forEach((k, v) -> {
+            LOGGER.info("Activating topic <"+k+">");
+            try {
+                createReader(k, v, topicCounters);
+                activeTopics.add(k);
+                durationStatistics.addAndGetThreads(1);
+            } catch (SQLException sqlException) {
+                LOGGER.error("Topic <"+k+"> not activated due to reader creation error: " + sqlException);
+            }
+        });
+        durationStatistics.report();
 
         // Activate all the found in-active topics, in other words create individual consumers for all of them using the createReader()-function.
-        for (String topic : foundTopics) {
+/*        for (String topic : foundTopics) {
             LOGGER.info("Activating topic <"+topic+">");
             try {
                 createReader(topic, topicCounters);
@@ -166,7 +204,7 @@ public class KafkaController {
                 LOGGER.error("Topic <"+topic+"> not activated due to reader creation error: " + sqlException);
             }
         }
-        durationStatistics.report();
+        durationStatistics.report();*/
     }
 
 }
