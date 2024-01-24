@@ -46,6 +46,7 @@ public class Config {
     private final String kerberosKeytabPath;
     private final String kerberosTestMode;
     private long maximumFileSize;
+    private final int numOfConsumers;
 
     // TODO: Set up configuration check for important parameters.
 
@@ -113,6 +114,7 @@ public class Config {
 
         // kafka
         this.queueTopicPattern = properties.getProperty("queueTopicPattern", "^.*$");
+        this.numOfConsumers = Integer.parseInt(properties.getProperty("numOfConsumers", "1"));
 
         this.kafkaConsumerProperties = loadSubProperties(properties, "consumer.");
         String loginConfig = properties.getProperty("java.security.auth.login.config");
@@ -236,5 +238,8 @@ public class Config {
     }
     public void setMaximumFileSize(long maximumFileSize) {
         this.maximumFileSize = maximumFileSize;
+    }
+    public int getNumOfConsumers() {
+        return numOfConsumers;
     }
 }

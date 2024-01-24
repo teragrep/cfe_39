@@ -56,12 +56,14 @@ public class KafkaController {
     private final DurationStatistics durationStatistics = new DurationStatistics();
     private boolean keepRunning;
     private boolean useMockKafkaConsumer;
+    private final int numOfConsumers;
     // private final MetricRegistry metricRegistry = new MetricRegistry();
 
     public KafkaController(Config config) {
         keepRunning = true;
         this.config = config;
         Properties readerKafkaProperties = config.getKafkaConsumerProperties();
+        this.numOfConsumers = config.getNumOfConsumers(); // TODO: Add config parametrization.
         this.useMockKafkaConsumer = Boolean.parseBoolean(
                 readerKafkaProperties.getProperty("useMockKafkaConsumer", "false")
         );
@@ -136,7 +138,7 @@ public class KafkaController {
         // Every consumer is run in a separate thread.
         // FIXME: Exception in thread "testConsumerTopic" java.nio.channels.OverlappingFileLockException. The cause is that the consumers are accessing the same partition for some reason when the partitions are supposed to be assigned to a single consumer.
         //  In other words the consumers are trying to store records to the same AVRO-file. The problem us most likely in the mock consumer side. That thing is confusing when trying to implement consumer groups.
-        int numOfThreads = Math.min(1, listPartitionInfo.size()); // Makes sure that more consumers are not assigned to the topic than there are partitions available on the topic.
+        int numOfThreads = Math.min(numOfConsumers, listPartitionInfo.size()); // Makes sure that more consumers are not assigned to the topic than there are partitions available on the topic.
         for (int testi = 1; numOfThreads >= testi; testi++) {
             Thread readThread = new Thread(null, readCoordinator, topic); // Starts the thread with readCoordinator that creates the consumer and subscribes to the topic.
             threads.add(readThread);
