@@ -27,7 +27,7 @@ class SyslogAvroWriter implements AutoCloseable {
         syncableFileOutputStream =
                 new SyncableFileOutputStream(syslogFile);
 
-        System.out.println("debugging syslogFile, path is: " + syslogFile.getPath());
+        // System.out.println("debugging syslogFile, path is: " + syslogFile.getPath());
         syncableFileOutputStream.getChannel().tryLock();
 
         if (syslogFile.length() == 0) {

@@ -174,7 +174,7 @@ public class KafkaController {
         }
 
 
-        // Activate all the found in-active topics, in other words create individual consumers for all of them using the createReader()-function.
+        // Activate all the found in-active topics, in other words create consumer groups for all of them using the createReader()-function.
         foundPartitions.forEach((k, v) -> {
             LOGGER.info("Activating topic <"+k+">");
             try {
