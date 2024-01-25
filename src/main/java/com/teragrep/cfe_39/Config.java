@@ -48,7 +48,7 @@ public class Config {
     private long maximumFileSize;
     private final int numOfConsumers;
 
-    // TODO: Set up configuration check for important parameters.
+    // TODO: Set up configuration check for important parameters. Remove old unused parameters.
 
     Config() throws IOException {
         Properties properties = new Properties();

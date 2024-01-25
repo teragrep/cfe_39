@@ -128,7 +128,8 @@ public class MockKafkaConsumerFactoryTemp {
         );
     }
 
-    public static Consumer<byte[], byte[]> getConsumer() {
+    // Can initialize topic scan with all partitions available when the input parameter is 0. Consumer is manually assigned to specific partitions depending on the threadnum parameter. For example on threadnum 1 consumer has odd numbered partitions assigned to it and threadnum 2 has the even numbered partitions.
+    public static Consumer<byte[], byte[]> getConsumer(int threadnum) {
 
         LOGGER.warn("useMockKafkaConsumer is set, using MockKafkaConsumer");
         int amountofloops = 10; // number of loops for adding partitions/records to the mock consumer topic. Each loop adds a new partition of 14 records. 17777 loops results in file size slightly above 64M. 10 loops is sized at 36,102 bits.
@@ -146,20 +147,52 @@ public class MockKafkaConsumerFactoryTemp {
             endOffsets.put(topicPartition, 14L);
             mockPartitionInfo.add(new PartitionInfo("testConsumerTopic", i, null, null, null));
         }
-        consumer.subscribe(Collections.singletonList("testConsumerTopic")); // subscribe
-        // consumer.assign(topicPartitions); // assign
+        // consumer.subscribe(Collections.singletonList("testConsumerTopic")); // subscribe
+
+        if (threadnum == 1) {
+            List<TopicPartition> oddTopicPartitions = new ArrayList<>();
+            for (TopicPartition a : topicPartitions) {
+                if(((a.partition() + 1) % 2) == 0) {
+                    oddTopicPartitions.add(a);
+                }
+            }
+            consumer.assign(oddTopicPartitions); // assign
+            for (TopicPartition a : topicPartitions) {
+                if(((a.partition() + 1) % 2) == 0) {
+                    generateEvents(consumer, a.topic(), a.partition());
+                }
+            }
+        } else if (threadnum == 2) {
+            List<TopicPartition> evenTopicPartitions = new ArrayList<>();
+            for (TopicPartition a : topicPartitions) {
+                if(((a.partition() + 1) % 2) != 0) {
+                    evenTopicPartitions.add(a);
+                }
+            }
+            consumer.assign(evenTopicPartitions); // assign
+            for (TopicPartition a : topicPartitions) {
+                if(((a.partition() + 1) % 2) != 0) {
+                    generateEvents(consumer, a.topic(), a.partition());
+                }
+            }
+        }else {
+            consumer.assign(topicPartitions); // assign
+            for (TopicPartition a : topicPartitions) {
+                generateEvents(consumer, a.topic(), a.partition());
+            }
+        }
+
         consumer.updateBeginningOffsets(beginningOffsets);
 
         //insert stuff
-        consumer.rebalance(topicPartitions); // needed for subscribe
-        for (TopicPartition a : topicPartitions) {
+        // consumer.rebalance(topicPartitions); // needed for subscribe
+        /*for (TopicPartition a : topicPartitions) {
             generateEvents(consumer, a.topic(), a.partition());
-        }
+        }*/
 
         consumer.updateEndOffsets(endOffsets);
         consumer.updatePartitions("testConsumerTopic", mockPartitionInfo);
         return consumer;
-        // TODO: Check how to implement consumer group in mockconsumer. The mockconsumer has consumer.groupMetadata() method available so it should be possible even though its not thread safe.
-        //  The code for starting consumers in separate threads is located in KafkaController.java line 132.
+        //  The code for starting consumers in separate threads is located in KafkaController.java line 138.
     }
 }

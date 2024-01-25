@@ -19,6 +19,8 @@ import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+// TODO: Clean up comments.
+
 public class KafkaController {
     // rlo_09 KafkaReader is the code that I should take a look at. ReadCoordinator alone won't allow access to the kafka offsets, it must be done in KafkaReader.
     // ReadCoordinator uses the KafkaReader, but it's set as private and there are no functions for accessing it through ReadCoordinator.
@@ -63,12 +65,12 @@ public class KafkaController {
         keepRunning = true;
         this.config = config;
         Properties readerKafkaProperties = config.getKafkaConsumerProperties();
-        this.numOfConsumers = config.getNumOfConsumers(); // TODO: Add config parametrization.
+        this.numOfConsumers = config.getNumOfConsumers();
         this.useMockKafkaConsumer = Boolean.parseBoolean(
                 readerKafkaProperties.getProperty("useMockKafkaConsumer", "false")
         );
         if (useMockKafkaConsumer) {
-            this.kafkaConsumer = MockKafkaConsumerFactoryTemp.getConsumer();
+            this.kafkaConsumer = MockKafkaConsumerFactoryTemp.getConsumer(0); // Used only for scanning the available topics.
         } else {
             this.kafkaConsumer = new KafkaConsumer<>(config.getKafkaConsumerProperties(), new ByteArrayDeserializer(), new ByteArrayDeserializer());
         }
@@ -111,36 +113,27 @@ public class KafkaController {
         // Add the new topicCounter object to the list.
         topicCounters.add(topicCounter);
 
-        // DatabaseOutput handles transferring the consumed data to storage (S3, mariadb, HDFS, etc.)
-        // Kafka offset tracking must be included here.
-        // Topic is figured out in topicScan so the offsets for the topic should be figured out here.
-        Consumer<List<RecordOffsetObject>> output = new DatabaseOutput(
-                config, // Configuration settings
-                topic, // String, the name of the topic
-                durationStatistics, // RuntimeStatistics object from metrics
-                topicCounter // TopicCounter object from metrics
-        );
-
-        // The kafka offsets must be passed to HDFS. The consumer must also be set to manual commits so the HDFS can handle managing the commit offsets within the HDFS filenames.
-        // plain rlo_09.ReadCoordinator won't give access to offset values. Implementing custom rlo_09 code in the package to achieve offset access.
-        ReadCoordinatorTemp readCoordinator = new ReadCoordinatorTemp(
-                topic,
-                config.getKafkaConsumerProperties(),
-                output
-        );
-        long totalRecords = topicCounter.getTotalRecords();
-
-//        Thread readThread = new Thread(null, readCoordinator, topic); // Starts the thread with readCoordinator that creates the consumer and subscribes to the topic.
-//        threads.add(readThread);
-//        readThread.start(); // Starts the thread, in other words proceeds to call run() function of ReadCoordinator.
-
-
         // Every consumer is run in a separate thread.
-        // FIXME: Exception in thread "testConsumerTopic" java.nio.channels.OverlappingFileLockException. The cause is that the consumers are accessing the same partition for some reason when the partitions are supposed to be assigned to a single consumer.
-        //  In other words the consumers are trying to store records to the same AVRO-file. The problem us most likely in the mock consumer side. That thing is confusing when trying to implement consumer groups.
-        int numOfThreads = Math.min(numOfConsumers, listPartitionInfo.size()); // Makes sure that more consumers are not assigned to the topic than there are partitions available on the topic.
+        // Consumer group is also handled here, and each consumer of the group runs on separate thread.
+        int numOfThreads = Math.min(numOfConsumers, listPartitionInfo.size()); // Makes sure that there aren't more consumers than available partitions in the consumer group.
         for (int testi = 1; numOfThreads >= testi; testi++) {
-            Thread readThread = new Thread(null, readCoordinator, topic); // Starts the thread with readCoordinator that creates the consumer and subscribes to the topic.
+            // DatabaseOutput handles transferring the consumed data to storage (S3, mariadb, HDFS, etc.)
+            // Kafka offset tracking must be included here.
+            // Topic is figured out in topicScan so the offsets for the topic should be figured out here.
+            Consumer<List<RecordOffsetObject>> output = new DatabaseOutput(
+                    config, // Configuration settings
+                    topic, // String, the name of the topic
+                    durationStatistics, // RuntimeStatistics object from metrics
+                    topicCounter // TopicCounter object from metrics
+            );
+            // The kafka offsets must be passed to HDFS. The consumer must also be set to manual commits so the HDFS can handle managing the commit offsets within the HDFS filenames.
+            // plain rlo_09.ReadCoordinator won't give access to offset values. Implementing custom rlo_09 code in the package to achieve offset access.
+            ReadCoordinatorTemp readCoordinator = new ReadCoordinatorTemp(
+                    topic,
+                    config.getKafkaConsumerProperties(),
+                    output
+            );
+            Thread readThread = new Thread(null, readCoordinator, topic+testi); // Starts the thread with readCoordinator that creates the consumer and subscribes to the topic.
             threads.add(readThread);
             readThread.start(); // Starts the thread, in other words proceeds to call run() function of ReadCoordinator.
         }
@@ -154,7 +147,7 @@ public class KafkaController {
         // Check how partitions are handled, need to allow using consumer groups for partition read assignments. aka. load balancing
         Set<String> foundTopics = new HashSet<>();
 
-        // TODO: 1. Add functionality so the partition information is also fetched for the queried topics. At the moment only the topic names are fetched.
+        // 1. Add functionality so the partition information is also fetched for the queried topics. At the moment only the topic names are fetched.
         Map<String, List<PartitionInfo>> foundPartitions = new HashMap<>();
 
 
@@ -163,7 +156,7 @@ public class KafkaController {
             if (matcher.matches()) {
                 foundTopics.add(entry.getKey());
 
-                // TODO: 2. Add functionality so the partition information is also fetched for the queried topics. At the moment only the topic names are fetched.
+                // 2. Add functionality so the partition information is also fetched for the queried topics. At the moment only the topic names are fetched.
                 foundPartitions.put(entry.getKey(), entry.getValue());
 
             }
@@ -175,13 +168,13 @@ public class KafkaController {
 
         // subtract currently active topics from found topics
         foundTopics.removeAll(activeTopics);
-        // TODO: 3. Subtract currently active partitions from found partitions
+        // 3. Subtract currently active partitions from found partitions
         for (String topic_name : activeTopics) {
             foundPartitions.remove(topic_name); // removes the partitions from the list based on the topic name.
         }
 
 
-        // TODO: Activate all the found in-active topics, in other words create individual consumers for all of them using the createReader()-function.
+        // Activate all the found in-active topics, in other words create individual consumers for all of them using the createReader()-function.
         foundPartitions.forEach((k, v) -> {
             LOGGER.info("Activating topic <"+k+">");
             try {

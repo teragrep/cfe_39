@@ -36,7 +36,12 @@ public class ReadCoordinatorTemp implements Runnable {
 
         org.apache.kafka.clients.consumer.Consumer<byte[], byte[]> kafkaConsumer;
         if (useMockKafkaConsumer) {
-            kafkaConsumer = MockKafkaConsumerFactoryTemp.getConsumer();
+            String name = Thread.currentThread().getName();
+            if (Objects.equals(name, "testConsumerTopic1")) {
+                kafkaConsumer = MockKafkaConsumerFactoryTemp.getConsumer(1);
+            }else {
+                kafkaConsumer = MockKafkaConsumerFactoryTemp.getConsumer(2);
+            }
         } else {
             kafkaConsumer = new KafkaConsumer<>(readerKafkaProperties, new ByteArrayDeserializer(), new ByteArrayDeserializer());
             kafkaConsumer.subscribe(Collections.singletonList(topic));
@@ -47,11 +52,7 @@ public class ReadCoordinatorTemp implements Runnable {
 
     @Override
     public void run() {
-        boolean useMockKafkaConsumer = Boolean.parseBoolean(
-                readerKafkaProperties.getProperty("useMockKafkaConsumer", "false")
-        );
-
-
+        boolean useMockKafkaConsumer = Boolean.parseBoolean(readerKafkaProperties.getProperty("useMockKafkaConsumer", "false"));
         try (
                 KafkaReaderTemp kafkaReader = createKafkaReader(
                         readerKafkaProperties,

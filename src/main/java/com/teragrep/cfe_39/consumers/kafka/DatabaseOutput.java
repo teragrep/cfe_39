@@ -130,9 +130,9 @@ public class DatabaseOutput implements Consumer<List<RecordOffsetObject>> {
     }
 
     // Input parameter is a list of RecordOffsetObjects. Each object contains a record and its metadata (topic, partition and offset).
-    // TODO: Alter the processing so each partition will get their exclusive files.
-    //  The target where the record is stored in HDFS is based on the topic, partition and offset. ie. topic_name/0.123456 where offset is 123456.
-    //  AVRO-file with a path/name that starts with topic_name/0.X should only contain records from the 0th partition of topic named topic_name, topic_name/1.X should only contain records from 1st partition, etc.
+    // Each partition will get their exclusive files.
+    // The target where the record is stored in HDFS is based on the topic, partition and offset. ie. topic_name/0.123456 where offset is 123456.
+    // AVRO-file with a path/name that starts with topic_name/0.X should only contain records from the 0th partition of topic named topic_name, topic_name/1.X should only contain records from 1st partition, etc.
     @Override
     public void accept(List<RecordOffsetObject> recordOffsetObjectList) {
         long thisTime = Instant.now().toEpochMilli();
@@ -150,7 +150,7 @@ public class DatabaseOutput implements Consumer<List<RecordOffsetObject>> {
         // every recordOffsetObject.record on the recordOffsetObjectList basically represents a rlo_09 WriteCoordinator.accept(byte[] bytes) when the list is gone through in a loop.
         RecordOffsetObject lastObject = null;
         long start = Instant.now().toEpochMilli(); // Starts measuring performance here. Measures how long it takes to process the whole recordOffsetObjectList.
-        // TODO: This loop goes through all the records of the mock data in a single session.
+        // This loop goes through all the records of the mock data in a single session.
         for (RecordOffsetObject recordOffsetObject : recordOffsetObjectList) {
             // Initializing syslogAvroWriter.
             if (syslogAvroWriter == null) {
