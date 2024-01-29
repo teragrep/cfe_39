@@ -3,19 +3,13 @@ package com.teragrep.cfe_39.metrics;
 import com.codahale.metrics.Counter;
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.MetricRegistry;
-import com.codahale.metrics.Timer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.management.DynamicMBean;
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.concurrent.TimeUnit;
 
-// TODO: Change DurationStatistics to use dropwizard instead of mxj_01.
 public class DurationStatistics {
-    MetricRegistry metricRegistry = new MetricRegistry(); // TODO: MetricRegistry is initialized here. Implement the different mxj_01 metrics objects to it.
+    MetricRegistry metricRegistry = new MetricRegistry();
     private static final Logger LOGGER = LoggerFactory.getLogger(DurationStatistics.class);
     private Instant lastReportTime = Instant.now();
     private long lastBytes = 0L;
@@ -90,18 +84,15 @@ public class DurationStatistics {
     public long addAndGetThreads(long delta) {
         threadsStat.mark(delta);
         return threadsStat.getCount();
-        // return threadsStat.getAtomicLong().addAndGet(delta);
     }
 
     public long addAndGetBytes(long delta) {
         bytesStat.mark(delta);
         return bytesStat.getCount();
-        // return bytesStat.getAtomicLong().addAndGet(delta);
     }
 
     public long addAndGetRecords(long delta) {
         recordsStat.mark(delta);
         return recordsStat.getCount();
-        // return recordsStat.getAtomicLong().addAndGet(delta);
     }
 }

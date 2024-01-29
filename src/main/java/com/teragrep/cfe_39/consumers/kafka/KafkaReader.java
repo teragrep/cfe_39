@@ -8,8 +8,8 @@ import org.slf4j.LoggerFactory;
 import java.time.Duration;
 import java.util.*;
 
-public class KafkaReaderTemp implements AutoCloseable {
-    final Logger LOGGER = LoggerFactory.getLogger(KafkaReaderTemp.class);
+public class KafkaReader implements AutoCloseable {
+    final Logger LOGGER = LoggerFactory.getLogger(KafkaReader.class);
 
     private Iterator<ConsumerRecord<byte[], byte[]>> kafkaRecordsIterator = Collections.emptyIterator();
 
@@ -17,7 +17,7 @@ public class KafkaReaderTemp implements AutoCloseable {
 
     private final java.util.function.Consumer<List<RecordOffsetObject>> callbackFunction;
 
-    public KafkaReaderTemp(
+    public KafkaReader(
             Consumer<byte[], byte[]> kafkaConsumer, java.util.function.Consumer<List<RecordOffsetObject>> callbackFunction) {
         this.kafkaConsumer = kafkaConsumer;
         this.callbackFunction = callbackFunction;
@@ -54,10 +54,8 @@ public class KafkaReaderTemp implements AutoCloseable {
             // Offset and other required data for HDFS storage are added to the input parameters of the accept() function which processes the consumed record.
             callbackFunction.accept(recordOffsetObjectList);
             kafkaConsumer.commitSync();
-
             /*
-            commitSync():
-            It only commits the offsets that were actually polled and processed. If some offsets were not included in the last poll, then those offsets will not be committed.
+            commitSync() only commits the offsets that were actually polled and processed. If some offsets were not included in the last poll, then those offsets will not be committed.
             It will not commit the latest positions for all subscribed partitions. This would interfere with the Consumer Offset management concept of Kafka to be able to re-start an application where it left off.
             * */
         }

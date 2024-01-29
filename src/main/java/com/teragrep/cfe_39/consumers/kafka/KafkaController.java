@@ -19,11 +19,9 @@ import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-// TODO: Clean up comments.
-
 public class KafkaController {
-    // rlo_09 KafkaReader is the code that I should take a look at. ReadCoordinator alone won't allow access to the kafka offsets, it must be done in KafkaReader.
-    // ReadCoordinator uses the KafkaReader, but it's set as private and there are no functions for accessing it through ReadCoordinator.
+    // ReadCoordinator alone won't allow access to the kafka offsets, it must be done in KafkaReader that is used on rlo_09.
+    // ReadCoordinator uses the KafkaReader, but it's set as private in rlo_09 and there are no functions for accessing it through ReadCoordinator.
     // The enable.auto.commit=false is set in config and it is fetched by the config.getKafkaConsumerProperties().
     // cfe_30 is already using enable.auto.commit=false, so looking through cfe_30 and rlo_09 ReadCoordinator and KafkaReader functions should get the coding on right track.
 
@@ -59,7 +57,6 @@ public class KafkaController {
     private boolean keepRunning;
     private boolean useMockKafkaConsumer;
     private final int numOfConsumers;
-    // private final MetricRegistry metricRegistry = new MetricRegistry();
 
     public KafkaController(Config config) {
         keepRunning = true;
@@ -70,7 +67,7 @@ public class KafkaController {
                 readerKafkaProperties.getProperty("useMockKafkaConsumer", "false")
         );
         if (useMockKafkaConsumer) {
-            this.kafkaConsumer = MockKafkaConsumerFactoryTemp.getConsumer(0); // Used only for scanning the available topics.
+            this.kafkaConsumer = MockKafkaConsumerFactoryTemp.getConsumer(0); // A consumer used only for scanning the available topics to be allocated to consumers running in different threads (thus 0 as input parameter).
         } else {
             this.kafkaConsumer = new KafkaConsumer<>(config.getKafkaConsumerProperties(), new ByteArrayDeserializer(), new ByteArrayDeserializer());
         }
@@ -79,7 +76,7 @@ public class KafkaController {
     public void run() throws InterruptedException {
 
         // register duration statistics
-        durationStatistics.register(); // FIXED?
+        durationStatistics.register();
 
         // register per topic counting
         List<TopicCounter> topicCounters = new CopyOnWriteArrayList<>();
@@ -97,6 +94,7 @@ public class KafkaController {
             long topicScanDelay = 30000L;
             Thread.sleep(topicScanDelay);
 
+            // For testing purposes only. Stops the run when all the records are consumed from the mockConsumer during test.
             if (durationStatistics.getTotalRecords() > 0 & useMockKafkaConsumer) {
                 LOGGER.info("Processed all the test records. Closing.");
                 keepRunning = false;
@@ -128,7 +126,7 @@ public class KafkaController {
             );
             // The kafka offsets must be passed to HDFS. The consumer must also be set to manual commits so the HDFS can handle managing the commit offsets within the HDFS filenames.
             // plain rlo_09.ReadCoordinator won't give access to offset values. Implementing custom rlo_09 code in the package to achieve offset access.
-            ReadCoordinatorTemp readCoordinator = new ReadCoordinatorTemp(
+            ReadCoordinator readCoordinator = new ReadCoordinator(
                     topic,
                     config.getKafkaConsumerProperties(),
                     output
@@ -144,7 +142,7 @@ public class KafkaController {
         Map<String, List<PartitionInfo>> listTopics = kafkaConsumer.listTopics(Duration.ofSeconds(60)); // Topics can be fetched from mock consumer if the consumer has been updated separately with the partition info.
         Pattern topicsRegex = Pattern.compile(config.getQueueTopicPattern()); // Mock consumer has the partitions in this format: queueTopicPattern=^testConsumerTopic-*$
         // Find the topics available in Kafka based on given QueueTopicPattern, both active and in-active.
-        // Check how partitions are handled, need to allow using consumer groups for partition read assignments. aka. load balancing
+        // Need to allow using consumer groups for partition read assignments. aka. load balancing
         Set<String> foundTopics = new HashSet<>();
 
         // 1. Add functionality so the partition information is also fetched for the queried topics. At the moment only the topic names are fetched.
@@ -156,7 +154,7 @@ public class KafkaController {
             if (matcher.matches()) {
                 foundTopics.add(entry.getKey());
 
-                // 2. Add functionality so the partition information is also fetched for the queried topics. At the moment only the topic names are fetched.
+                // 2. Add functionality so the partition information is also fetched for the queried topics.
                 foundPartitions.put(entry.getKey(), entry.getValue());
 
             }
@@ -186,20 +184,6 @@ public class KafkaController {
             }
         });
         durationStatistics.report();
-
-        // Activate all the found in-active topics, in other words create individual consumers for all of them using the createReader()-function.
-/*        for (String topic : foundTopics) {
-            LOGGER.info("Activating topic <"+topic+">");
-            try {
-                createReader(topic, topicCounters);
-                activeTopics.add(topic);
-                durationStatistics.addAndGetThreads(1);
-            }
-            catch (SQLException sqlException) {
-                LOGGER.error("Topic <"+topic+"> not activated due to reader creation error: " + sqlException);
-            }
-        }
-        durationStatistics.report();*/
     }
 
 }
