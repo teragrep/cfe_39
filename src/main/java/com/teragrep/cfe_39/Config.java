@@ -51,7 +51,7 @@ public class Config {
     private final boolean overrideTableLocation;
     private final String tableLocation;
     private final String hdfsPath;
-    private final String hdfsuri;
+    private String hdfsuri;
     private final String queueDirectory;
     private final String queueNamePrefix;
     private final String kerberosHost;
@@ -112,7 +112,7 @@ public class Config {
 
         // HDFS
         this.hdfsPath = properties.getProperty("hdfsPath", "hdfs:///opt/teragrep/cfe_39/srv/");
-        this.hdfsuri = properties.getProperty("hdfsuri", "");
+        this.hdfsuri = properties.getProperty("hdfsuri", "hdfs://localhost:45937/");
 
         // AVRO
         this.queueDirectory = properties.getProperty("queueDirectory", "");
@@ -187,6 +187,9 @@ public class Config {
 
     public String getHdfsPath() {
         return hdfsPath;
+    }
+    public void setHdfsuri(String input) {
+        this.hdfsuri = input;
     }
     public String getHdfsuri() {
         return hdfsuri;

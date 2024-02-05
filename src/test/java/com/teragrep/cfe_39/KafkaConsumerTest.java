@@ -65,7 +65,7 @@ public class KafkaConsumerTest {
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
-        cleanup(config, 1, 5);
+        cleanup(config, 1, 2);
     }
 
     // Reads the data from a list of avro files
