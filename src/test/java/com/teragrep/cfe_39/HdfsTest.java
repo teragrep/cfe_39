@@ -51,7 +51,7 @@ public class HdfsTest {
     }
 
     public static void startMiniCluster() throws IOException {
-        // TODO: Create a HDFS miniCluster
+        // Create a HDFS miniCluster
         baseDir = Files.createTempDirectory("test_hdfs").toFile().getAbsoluteFile();
         Configuration conf = new Configuration();
         conf.set(MiniDFSCluster.HDFS_MINIDFS_BASEDIR, baseDir.getAbsolutePath());
@@ -88,7 +88,7 @@ public class HdfsTest {
     }
 
     public static void closeMiniCluster() {
-        // TODO: teardown HDFS miniCluster
+        // Teardown HDFS miniCluster
         hdfsCluster.shutdown();
         FileUtil.fullyDelete(baseDir);
     }
@@ -133,10 +133,8 @@ public class HdfsTest {
 
                 assert lastRecord != null;
                 RecordOffsetObject lastObject = new RecordOffsetObject("testConsumerTopic", Integer.parseInt(lastRecord.getPartition().toString()), lastRecord.getOffset(), null); // Fetch input parameters from the lastRecord SyslogRecord-object.
-                System.out.println("Last record in the " + syslogFile.getName() + " file:" + "\ntopic: " + lastObject.topic + "\npartition: " + lastObject.partition + "\noffset: " + lastObject.offset + "\n");
-                // TODO: TEST THE WRITES! THE URL FOR HDFS MUST BE UPDATED TO THE URL THAT IS GENERATED IN startMiniCluster().
+                System.out.println("\n"+"Last record in the " + syslogFile.getName() + " file:" + "\ntopic: " + lastObject.topic + "\npartition: " + lastObject.partition + "\noffset: " + lastObject.offset);
                 try (HDFSWriter writer = new HDFSWriter(config, lastObject)) {
-                    System.out.print("Testing stuff here.");
                     writer.commit(syslogFile); // commits the final AVRO-file to HDFS.
                 } catch (IOException e) {
                     throw new RuntimeException(e);
@@ -198,14 +196,20 @@ public class HdfsTest {
         //The data is in AVRO-format, so it can't be read as a string.
         DataFileStream<SyslogRecord> reader = new DataFileStream<>(inputStream, new SpecificDatumReader<>(SyslogRecord.class));
         SyslogRecord record = null;
-        int looper = 0;
+        int looper;
+        if (offset == 8) {
+            looper = 0;
+        } else if (offset == 13) {
+            looper = 9;
+        }else {
+            looper = 0;
+            Assertions.fail("The offset of the last record is not 8 or 13, which means a failed test.");
+        }
         while (reader.hasNext()) {
-            reader.next();
             record = reader.next(record);
             System.out.println(record);
             // Assert records here like it is done in KafkaConsumerTest.avroReader().
-            // FIXME: The offset looper is broken. Check KafkaConsumerTest.avroReader and compare it with this implementation.
-            /*if (looper <= 0) {
+            if (looper <= 0) {
                 Assertions.assertEquals("{\"timestamp\": 1650872090804000, \"message\": \"[WARN] 2022-04-25 07:34:50,804 com.teragrep.jla_02.Log4j Log - Log4j warn says hi!\", \"directory\": \"jla02logger\", \"stream\": \"test:jla02logger:0\", \"host\": \"jla-02.default\", \"input\": \"imrelp:cfe-06-0.cfe-06.default:\", \"partition\": \"" + partition + "\", \"offset\": 0, \"origin\": \"jla-02.default\"}", record.toString());
                 looper++;
             } else if (looper == 1) {
@@ -247,7 +251,7 @@ public class HdfsTest {
             } else {
                 Assertions.assertEquals("{\"timestamp\": 1650872092243000, \"message\": \"25.04.2022 07:34:52.243 [ERROR] com.teragrep.jla_02.Log4j2 [instanceId=01, thread=Thread-0, userId=, sessionId=, requestId=, SUBJECT=, VERB=, OBJECT=, OUTCOME=, message=Log4j2 error metric says hi!]\", \"directory\": \"jla02logger\", \"stream\": \"test:jla02logger:0\", \"host\": \"jla-02.default\", \"input\": \"imrelp:cfe-06-0.cfe-06.default:\", \"partition\": \"" + partition + "\", \"offset\": 13, \"origin\": \"jla-02.default\"}", record.toString());
                 looper = 0;
-            }*/
+            }
         }
         // logger.info(out);
         inputStream.close();

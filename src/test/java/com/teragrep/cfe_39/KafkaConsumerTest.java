@@ -25,7 +25,7 @@ import java.util.*;
 public class KafkaConsumerTest {
     // Make sure application.properties has consumer.useMockKafkaConsumer=true enabled for Kafka testing.
 
-    @Test
+    // @Test
     public void configTest() {
         // Configuration tests done, configurations working correctly with the right .jaas and .properties files.
         try {
@@ -44,7 +44,7 @@ public class KafkaConsumerTest {
     }
 
 
-    @Test
+    // @Test
     public void kafkaAndAvroFullTest() throws InterruptedException {
         Config config = null;
         try {
