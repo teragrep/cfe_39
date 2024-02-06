@@ -106,7 +106,7 @@ public class DatabaseOutput implements Consumer<List<RecordOffsetObject>> {
         this.approximatedSize = 0;
     }
 
-    boolean checkSizeTooLarge(long fileSize, RecordOffsetObject lastObject) {
+    boolean checkSizeTooLarge(long fileSize, RecordOffsetObject recordOffsetObject) {
         try {
             // If the syslogAvroWriter is already initialized, check the filesize so it doesn't go above maximumFileSize.
             if (fileSize > maximumFileSize) {
@@ -115,14 +115,14 @@ public class DatabaseOutput implements Consumer<List<RecordOffsetObject>> {
                 // This part closes the writing of now "complete" AVRO-file and stores the file to HDFS.
                 syslogAvroWriter.close();
                 // FIXME: UNCOMMENT WHEN DONE TESTING THE CONSUMER! This commits the AVRO-file to HDFS.
-                /*try (HDFSWriter writer = new HDFSWriter(config, lastObject)) {
+                // FIXME: lastObject is faulty, it gives the wrong offset value to the HDFSWriter.
+                try (HDFSWriter writer = new HDFSWriter(config, recordOffsetObject)) {
                     writer.commit(syslogFile); // commits the final AVRO-file to HDFS.
-                }*/
+                }
 
                 // This part defines a new empty file to which the new AVRO-serialized records are stored until it again hits the 64M size limit.
-                writableQueue.setQueueNamePrefix(lastObject.topic+lastObject.partition);
-                File syslogFile =
-                        writableQueue.getNextWritableFile();
+                writableQueue.setQueueNamePrefix(recordOffsetObject.topic+recordOffsetObject.partition);
+                syslogFile = writableQueue.getNextWritableFile();
                 syslogAvroWriter = new SyslogAvroWriter(syslogFile);
                 approximatedSize = syslogAvroWriter.getFileSize(); // resets the size approximation.
                 return true;
@@ -189,19 +189,19 @@ public class DatabaseOutput implements Consumer<List<RecordOffsetObject>> {
                     assert lastObject != null;
                     if (lastObject.topic.equals(recordOffsetObject.topic) & lastObject.partition.equals(recordOffsetObject.partition)) {
                         // Records left to consume in the current partition.
-                        checkSizeTooLarge(syslogAvroWriter.getFileSize(), recordOffsetObject);
+                        checkSizeTooLarge(syslogAvroWriter.getFileSize(), lastObject);
                     } else {
                         // Previous partition was fully consumed. Commit file to HDFS and create a new AVRO-file.
                         syslogAvroWriter.close();
                         // FIXME: UNCOMMENT WHEN DONE TESTING THE CONSUMER! This commits the AVRO-file to HDFS.
-                        /*try (HDFSWriter writer = new HDFSWriter(config, lastObject)) {
+                        // FIXME: lastObject is faulty, it gives the wrong offset value to the HDFSWriter.
+                        try (HDFSWriter writer = new HDFSWriter(config, lastObject)) {
                             writer.commit(syslogFile);
-                        }*/
+                        }
 
                         // This part defines a new empty file to which the new AVRO-serialized records are stored until it again hits the 64M size limit.
                         writableQueue.setQueueNamePrefix(recordOffsetObject.topic+recordOffsetObject.partition);
-                        File syslogFile =
-                                writableQueue.getNextWritableFile();
+                        syslogFile = writableQueue.getNextWritableFile();
                         syslogAvroWriter = new SyslogAvroWriter(syslogFile);
                         approximatedSize = syslogAvroWriter.getFileSize(); // resets the size approximation.
                     }
@@ -261,7 +261,7 @@ public class DatabaseOutput implements Consumer<List<RecordOffsetObject>> {
                     long capacity = syslogRecord.toByteBuffer().capacity();
                     // Check if there is still room in syslogAvroWriter for another syslogRecord. Commit syslogAvroWriter to HDFS if no room left, emptying it out in the process.
                     // checkSizeTooLarge(approximatedSize + capacity, lastObject); // FIXME: approximatedSize is not working properly without the use of flush() after append. File sizes are all over the place.
-                    checkSizeTooLarge(syslogAvroWriter.getFileSize() + capacity, recordOffsetObject);
+                    checkSizeTooLarge(syslogAvroWriter.getFileSize() + capacity, lastObject);
                     // Add syslogRecord to syslogAvroWriter which has room for new syslogRecord.
                     syslogAvroWriter.write(syslogRecord);
                     approximatedSize += capacity;
@@ -278,9 +278,10 @@ public class DatabaseOutput implements Consumer<List<RecordOffsetObject>> {
             if (syslogAvroWriter != null) {
                 syslogAvroWriter.close();
                 // FIXME: UNCOMMENT WHEN DONE TESTING THE CONSUMER! This commits the AVRO-file to HDFS.
-                /*try (HDFSWriter writer = new HDFSWriter(config, lastObject)) {
+                // FIXME: lastObject is faulty, it gives the wrong offset value to the HDFSWriter.
+                try (HDFSWriter writer = new HDFSWriter(config, lastObject)) {
                     writer.commit(syslogFile); // commits the final AVRO-file to HDFS.
-                }*/
+                }
             }
         } catch (IOException e) {
             throw new RuntimeException(e);

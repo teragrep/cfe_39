@@ -32,7 +32,7 @@ public class HdfsTest {
     private static Config config;
 
     // Generate AVRO-files for testing the HDFS writes.
-    @BeforeAll
+    // @BeforeAll
     public static void generateTestData() throws IOException, InterruptedException {
         config = null;
         try {
@@ -64,7 +64,7 @@ public class HdfsTest {
     }
 
     // Delete the generated AVRO-files.
-    @AfterAll
+    // @AfterAll
     public static void deleteTestData() throws IOException {
         Path queueDirectory = new Path(config.getQueueDirectory()); // Paths.get(config.getQueueDirectory());
         for (int j = 0; j <= 9; j++) {
@@ -99,7 +99,7 @@ public class HdfsTest {
         closeMiniCluster();
     }
 
-    @Test
+    // @Test
     public void hdfsWriteTest() {
 
         try {

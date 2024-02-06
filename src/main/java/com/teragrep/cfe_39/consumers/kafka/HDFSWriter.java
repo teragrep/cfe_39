@@ -162,6 +162,8 @@ public class HDFSWriter implements AutoCloseable{
                 outputStream.close();
                 // logger.info("End Write file into hdfs");
                 boolean delete = syslogFile.delete(); // deletes the avro-file from the local disk now that it has been committed to HDFS.
+                // FIXME: delete is breaking something in integration test.
+                System.out.println("\n" + "File committed to HDFS, file writepath should be: " + hdfswritepath.toString() + "\n");
 
             } catch (IOException e) {
                 throw new RuntimeException(e);
