@@ -63,9 +63,7 @@ public class KafkaController {
     // processes ONLY those messages that have not already been processed based on the offset values stored in HDFS filenames.
 
     private static final Logger LOGGER = LoggerFactory.getLogger(KafkaController.class);
-
     private final Config config;
-
     private final org.apache.kafka.clients.consumer.Consumer<byte[], byte[]> kafkaConsumer;
     private final List<Thread> threads = new ArrayList<>();
     private final Set<String> activeTopics = new HashSet<>();

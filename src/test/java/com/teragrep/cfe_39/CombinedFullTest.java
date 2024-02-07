@@ -1,12 +1,9 @@
 package com.teragrep.cfe_39;
 
 import com.teragrep.cfe_39.avro.SyslogRecord;
-import com.teragrep.cfe_39.consumers.kafka.HDFSWriter;
+import com.teragrep.cfe_39.consumers.kafka.DatabaseOutput;
 import com.teragrep.cfe_39.consumers.kafka.KafkaController;
-import com.teragrep.cfe_39.consumers.kafka.RecordOffsetObject;
-import org.apache.avro.file.DataFileReader;
 import org.apache.avro.file.DataFileStream;
-import org.apache.avro.io.DatumReader;
 import org.apache.avro.specific.SpecificDatumReader;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataInputStream;
@@ -19,6 +16,8 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.IOException;
@@ -29,6 +28,7 @@ import java.util.List;
 
 public class CombinedFullTest {
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(CombinedFullTest.class);
     private static MiniDFSCluster hdfsCluster;
     private static File baseDir;
     private static Config config;
@@ -41,10 +41,10 @@ public class CombinedFullTest {
         try {
             config = new Config();
         } catch (IOException e){
-            System.out.println("Can't load config: " + e);
+            LOGGER.error("Can't load config: " + e);
             System.exit(1);
         } catch (IllegalArgumentException e) {
-            System.out.println("Got invalid config: " + e);
+            LOGGER.error("Got invalid config: " + e);
             System.exit(1);
         }
         // Create a HDFS miniCluster
@@ -54,7 +54,7 @@ public class CombinedFullTest {
         MiniDFSCluster.Builder builder = new MiniDFSCluster.Builder(conf);
         hdfsCluster = builder.build();
         String hdfsURI = "hdfs://localhost:"+ hdfsCluster.getNameNodePort() + "/";
-        System.out.println("hdfsURI: " + hdfsURI);
+        // System.out.println("hdfsURI: " + hdfsURI);
         config.setHdfsuri(hdfsURI);
         DistributedFileSystem fileSystem = hdfsCluster.getFileSystem();
     }
@@ -68,7 +68,7 @@ public class CombinedFullTest {
 
     @Test
     public void kafkaAndAvroFullTest() throws InterruptedException {
-        config.setMaximumFileSize(3000); // 10 loops (140 records) are in use at the moment, and that is sized at 36,102 bits.
+        config.setMaximumFileSize(3000); // 10 loops (140 records) are in use at the moment, and that is sized at 36,102 bytes.
         KafkaController kafkaController = new KafkaController(config);
         Thread.sleep(10000);
         kafkaController.run();
@@ -86,7 +86,6 @@ public class CombinedFullTest {
         String hdfsuri = config.getHdfsuri();
 
         String path = config.getHdfsPath()+"/"+"testConsumerTopic";
-        // String fileName = "testConsumerTopic1.1";
         // ====== Init HDFS File System Object
         Configuration conf = new Configuration();
         // Set FileSystem URI
@@ -106,13 +105,13 @@ public class CombinedFullTest {
         if(!fs.exists(newFolderPath)) {
             // Create new Directory
             fs.mkdirs(newFolderPath);
-            // logger.info("Path "+path+" created.");
+            LOGGER.info("Path "+path+" created.");
         }
 
         // This is the HDFS write path for the files:
         // Path hdfswritepath = new Path(newFolderPath + "/" + fileName); where newFolderPath is config.getHdfsPath() + "/" + lastObject.topic; and filename is lastObject.partition+"."+lastObject.offset;
 
-
+        // Create the list of files to read from HDFS. Test setup is created so each of the 0-9 partitions will have 2 files with offsets of 8 and 13.
         List<String> filenameList = new ArrayList<>();
         for (int i = 0; i <= 9; i++) {
             filenameList.add(i + "." + 8);
@@ -122,7 +121,7 @@ public class CombinedFullTest {
         int partitionCounter = 0;
         for (String fileName : filenameList) {
             //==== Read files
-            // logger.info("Read file into hdfs");
+            LOGGER.info("Read file into hdfs");
             //Create a path
             Path hdfsreadpath = new Path(newFolderPath + "/" + fileName); // The path should be the same that was used in writing the file to HDFS.
             //Init input stream
@@ -130,10 +129,10 @@ public class CombinedFullTest {
             //The data is in AVRO-format, so it can't be read as a string.
             DataFileStream<SyslogRecord> reader = new DataFileStream<>(inputStream, new SpecificDatumReader<>(SyslogRecord.class));
             SyslogRecord record = null;
-            System.out.println("\nReading records from file " + hdfsreadpath.toString() + ":");
+            LOGGER.info("\nReading records from file " + hdfsreadpath.toString() + ":");
             while (reader.hasNext()) {
                 record = reader.next(record);
-                System.out.println(record);
+                LOGGER.info(record.toString());
                 // Assert records here like it is done in KafkaConsumerTest.avroReader().
                 if (looper <= 0) {
                     Assertions.assertEquals("{\"timestamp\": 1650872090804000, \"message\": \"[WARN] 2022-04-25 07:34:50,804 com.teragrep.jla_02.Log4j Log - Log4j warn says hi!\", \"directory\": \"jla02logger\", \"stream\": \"test:jla02logger:0\", \"host\": \"jla-02.default\", \"input\": \"imrelp:cfe-06-0.cfe-06.default:\", \"partition\": \"" + partitionCounter + "\", \"offset\": 0, \"origin\": \"jla-02.default\"}", record.toString());
@@ -181,9 +180,7 @@ public class CombinedFullTest {
                 }
             }
             inputStream.close();
-            // fs.close();
         }
         fs.close();
-        // logger.info(out);
     }
 }

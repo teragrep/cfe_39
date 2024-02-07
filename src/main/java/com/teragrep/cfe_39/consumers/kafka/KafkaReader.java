@@ -27,11 +27,8 @@ import java.util.*;
 
 public class KafkaReader implements AutoCloseable {
     final Logger LOGGER = LoggerFactory.getLogger(KafkaReader.class);
-
     private Iterator<ConsumerRecord<byte[], byte[]>> kafkaRecordsIterator = Collections.emptyIterator();
-
     private final Consumer<byte[], byte[]> kafkaConsumer;
-
     private final java.util.function.Consumer<List<RecordOffsetObject>> callbackFunction;
 
     public KafkaReader(

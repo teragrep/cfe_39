@@ -1,6 +1,7 @@
 package com.teragrep.cfe_39;
 
 import com.teragrep.cfe_39.avro.SyslogRecord;
+import com.teragrep.cfe_39.consumers.kafka.DatabaseOutput;
 import com.teragrep.cfe_39.consumers.kafka.HDFSWriter;
 import com.teragrep.cfe_39.consumers.kafka.KafkaController;
 import com.teragrep.cfe_39.consumers.kafka.RecordOffsetObject;
@@ -19,6 +20,8 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.IOException;
@@ -26,6 +29,7 @@ import java.net.URI;
 import java.nio.file.Files;
 
 public class HdfsTest {
+    private static final Logger LOGGER = LoggerFactory.getLogger(HdfsTest.class);
 
     private static MiniDFSCluster hdfsCluster;
     private static File baseDir;
@@ -38,14 +42,14 @@ public class HdfsTest {
         try {
             config = new Config();
         } catch (IOException e){
-            System.out.println("Can't load config: " + e);
+            LOGGER.error("Can't load config: " + e);
             System.exit(1);
         } catch (IllegalArgumentException e) {
-            System.out.println("Got invalid config: " + e);
+            LOGGER.error("Got invalid config: " + e);
             System.exit(1);
         }
         startMiniCluster();
-        config.setMaximumFileSize(3000); // 10 loops (140 records) are in use at the moment, and that is sized at 36,102 bits.
+        config.setMaximumFileSize(3000); // 10 loops (140 records) are in use at the moment, and that is sized at 36,102 bytes.
         KafkaController kafkaController = new KafkaController(config);
         kafkaController.run();
     }
@@ -58,7 +62,7 @@ public class HdfsTest {
         MiniDFSCluster.Builder builder = new MiniDFSCluster.Builder(conf);
         hdfsCluster = builder.build();
         String hdfsURI = "hdfs://localhost:"+ hdfsCluster.getNameNodePort() + "/";
-        System.out.println("hdfsURI: " + hdfsURI);
+        LOGGER.debug("hdfsURI: " + hdfsURI);
         config.setHdfsuri(hdfsURI);
         DistributedFileSystem fileSystem = hdfsCluster.getFileSystem();
     }
@@ -133,7 +137,7 @@ public class HdfsTest {
 
                 assert lastRecord != null;
                 RecordOffsetObject lastObject = new RecordOffsetObject("testConsumerTopic", Integer.parseInt(lastRecord.getPartition().toString()), lastRecord.getOffset(), null); // Fetch input parameters from the lastRecord SyslogRecord-object.
-                System.out.println("\n"+"Last record in the " + syslogFile.getName() + " file:" + "\ntopic: " + lastObject.topic + "\npartition: " + lastObject.partition + "\noffset: " + lastObject.offset);
+                LOGGER.debug("\n"+"Last record in the " + syslogFile.getName() + " file:" + "\ntopic: " + lastObject.topic + "\npartition: " + lastObject.partition + "\noffset: " + lastObject.offset);
                 try (HDFSWriter writer = new HDFSWriter(config, lastObject)) {
                     writer.commit(syslogFile); // commits the final AVRO-file to HDFS.
                 } catch (IOException e) {
@@ -207,7 +211,7 @@ public class HdfsTest {
         }
         while (reader.hasNext()) {
             record = reader.next(record);
-            System.out.println(record);
+            LOGGER.debug(record.toString());
             // Assert records here like it is done in KafkaConsumerTest.avroReader().
             if (looper <= 0) {
                 Assertions.assertEquals("{\"timestamp\": 1650872090804000, \"message\": \"[WARN] 2022-04-25 07:34:50,804 com.teragrep.jla_02.Log4j Log - Log4j warn says hi!\", \"directory\": \"jla02logger\", \"stream\": \"test:jla02logger:0\", \"host\": \"jla-02.default\", \"input\": \"imrelp:cfe-06-0.cfe-06.default:\", \"partition\": \"" + partition + "\", \"offset\": 0, \"origin\": \"jla-02.default\"}", record.toString());

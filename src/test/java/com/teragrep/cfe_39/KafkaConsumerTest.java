@@ -12,6 +12,8 @@ import org.apache.kafka.common.TopicPartition;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import com.teragrep.cfe_39.avro.SyslogRecord;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -23,6 +25,7 @@ import java.io.IOException;
 import java.util.*;
 
 public class KafkaConsumerTest {
+    private static final Logger LOGGER = LoggerFactory.getLogger(KafkaConsumerTest.class);
     // Make sure application.properties has consumer.useMockKafkaConsumer=true enabled for Kafka testing.
 
     // @Test
@@ -37,7 +40,7 @@ public class KafkaConsumerTest {
             boolean useMockKafkaConsumer = Boolean.parseBoolean(
                     readerKafkaProperties.getProperty("useMockKafkaConsumer", "false")
             );
-            System.out.println("useMockKafkaConsumer: "+useMockKafkaConsumer);
+            LOGGER.debug("useMockKafkaConsumer: "+useMockKafkaConsumer);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -50,13 +53,13 @@ public class KafkaConsumerTest {
         try {
             config = new Config();
         } catch (IOException e){
-            System.out.println("Can't load config: " + e);
+            LOGGER.error("Can't load config: " + e);
             System.exit(1);
         } catch (IllegalArgumentException e) {
-            System.out.println("Got invalid config: " + e);
+            LOGGER.error("Got invalid config: " + e);
             System.exit(1);
         }
-        config.setMaximumFileSize(3000); // 10 loops (140 records) are in use at the moment, and that is sized at 36,102 bits.
+        config.setMaximumFileSize(3000); // 10 loops (140 records) are in use at the moment, and that is sized at 36,102 bytes.
         KafkaController kafkaController = new KafkaController(config);
         kafkaController.run();
         try {
@@ -91,8 +94,8 @@ public class KafkaConsumerTest {
                     SyslogRecord user = null;
                     while (dataFileReader.hasNext()) {
                         user = dataFileReader.next(user);
-                        System.out.println(syslogFile.getPath());
-                        System.out.println(user);
+                        LOGGER.debug(syslogFile.getPath());
+                        LOGGER.debug(user.toString());
                         counter++;
                         // All the mock data is generated from a set of 14 records.
                         if (looper <= 0) {
@@ -143,7 +146,7 @@ public class KafkaConsumerTest {
                 }
             }
         }
-        System.out.println("Total number of records: " + counter);
+        LOGGER.debug("Total number of records: " + counter);
         return counter;
     }
 

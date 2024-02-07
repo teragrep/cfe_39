@@ -22,6 +22,8 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.*;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.apache.hadoop.security.UserGroupInformation;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.IOException;
@@ -32,6 +34,7 @@ import java.util.Properties;
 
 public class HDFSWriter implements AutoCloseable{
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(HDFSWriter.class);
     private final String fileName;
     private final String path;
     private final FileSystem fs;
@@ -136,11 +139,11 @@ public class HDFSWriter implements AutoCloseable{
                 if (!fs.exists(newFolderPath)) {
                     // Create new Directory
                     fs.mkdirs(newFolderPath);
-                    // logger.info("Path "+path+" created.");
+                    LOGGER.info("Path "+path+" created.");
                 }
 
                 //==== Write file
-                // logger.info("Begin Write file into hdfs");
+                LOGGER.info("Begin Write file into hdfs");
                 //Create a path
                 Path hdfswritepath = new Path(newFolderPath + "/" + fileName); // filename should be set according to the requirements: 0.12345 where 0 is Kafka partition and 12345 is Kafka offset.
                 if (fs.exists(hdfswritepath)) {
@@ -160,10 +163,9 @@ public class HDFSWriter implements AutoCloseable{
                 outputStream.write(bytes);
 
                 outputStream.close();
-                // logger.info("End Write file into hdfs");
+                LOGGER.info("End Write file into hdfs");
                 boolean delete = syslogFile.delete(); // deletes the avro-file from the local disk now that it has been committed to HDFS.
-                // FIXME: delete is breaking something in integration test.
-                System.out.println("\n" + "File committed to HDFS, file writepath should be: " + hdfswritepath.toString() + "\n");
+                // System.out.println("\n" + "File committed to HDFS, file writepath should be: " + hdfswritepath.toString() + "\n");
 
             } catch (IOException e) {
                 throw new RuntimeException(e);
@@ -178,11 +180,11 @@ public class HDFSWriter implements AutoCloseable{
                 if (!fs.exists(newFolderPath)) {
                     // Create new Directory
                     fs.mkdirs(newFolderPath);
-                    // logger.info("Path "+path+" created.");
+                    LOGGER.info("Path "+path+" created.");
                 }
 
                 //==== Write file
-                // logger.info("Begin Write file into hdfs");
+                LOGGER.info("Begin Write file into hdfs");
                 //Create a path
                 Path hdfswritepath = new Path(newFolderPath + "/" + fileName); // filename should be set according to the requirements: 0.12345 where 0 is Kafka partition and 12345 is Kafka offset.
                 //Init output stream
@@ -199,7 +201,7 @@ public class HDFSWriter implements AutoCloseable{
                 byte[] bytes = Files.readAllBytes(Paths.get(syslogFile.getPath()));
                 outputStream.write(bytes);
                 outputStream.close();
-                // logger.info("End Write file into hdfs");
+                LOGGER.info("End Write file into hdfs");
                 boolean delete = syslogFile.delete(); // deletes the avro-file from the local disk now that it has been committed to HDFS.
 
             } catch (IOException e) {
