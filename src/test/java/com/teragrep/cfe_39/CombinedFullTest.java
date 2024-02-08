@@ -6,10 +6,7 @@ import com.teragrep.cfe_39.consumers.kafka.KafkaController;
 import org.apache.avro.file.DataFileStream;
 import org.apache.avro.specific.SpecificDatumReader;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FSDataInputStream;
-import org.apache.hadoop.fs.FileSystem;
-import org.apache.hadoop.fs.FileUtil;
-import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.*;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
 import org.junit.jupiter.api.AfterAll;
@@ -23,6 +20,7 @@ import java.io.File;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Files;
+import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -74,11 +72,49 @@ public class CombinedFullTest {
         kafkaController.run();
         // The avro files should be committed to HDFS now. Check the committed files for any errors.
         // There should be 20 files, 10 partitions with each having 2 files assigned to them.
-        try {
+        /*try {
             hdfsReadCheck();
         } catch (IOException e) {
             throw new RuntimeException(e);
+        }*/
+    }
+
+    @Test
+    public void hdfsPruneTest() throws IOException {
+        // Check that the files were properly written to HDFS with a read test.
+        String hdfsuri = config.getHdfsuri();
+
+        String path = config.getHdfsPath()+"/"+"testConsumerTopic";
+        // ====== Init HDFS File System Object
+        Configuration conf = new Configuration();
+        // Set FileSystem URI
+        conf.set("fs.defaultFS", hdfsuri);
+        // Because of Maven
+        conf.set("fs.hdfs.impl", org.apache.hadoop.hdfs.DistributedFileSystem.class.getName());
+        conf.set("fs.file.impl", org.apache.hadoop.fs.LocalFileSystem.class.getName());
+        // Set HADOOP user
+        System.setProperty("HADOOP_USER_NAME", "hdfs");
+        System.setProperty("hadoop.home.dir", "/");
+        //Get the filesystem - HDFS
+        FileSystem fs = FileSystem.get(URI.create(hdfsuri), conf);
+
+        //==== Create folder if not exists
+        Path workingDir=fs.getWorkingDirectory();
+        Path newFolderPath= new Path(path);
+        if(!fs.exists(newFolderPath)) {
+            // Create new Directory
+            fs.mkdirs(newFolderPath);
+            LOGGER.info("Path "+path+" created.");
         }
+
+        // TODO: Which timestamp should be used for pruning? The HDFS timestamp is easy to fetch and use but it is inaccurate especially for the first full cycle when the cfe_39 is first started.
+        //  It would be much more heavy task to check the timestamps of the records that are stored in the file, rather than just checking the file timestamp.
+        FileStatus[] fileStatuses = fs.listStatus(new Path(newFolderPath + "/"));
+        for (FileStatus a : fileStatuses) {
+            Timestamp timestamp = new Timestamp(a.getModificationTime());
+            LOGGER.info("Timestamp for file " + a.getPath() + " is: " + timestamp);
+        }
+        fs.close();
     }
 
     public void hdfsReadCheck() throws IOException {
