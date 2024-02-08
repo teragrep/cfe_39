@@ -24,11 +24,15 @@ import org.apache.avro.file.SeekableFileInput;
 import org.apache.avro.file.SyncableFileOutputStream;
 import org.apache.avro.io.DatumWriter;
 import org.apache.avro.specific.SpecificDatumWriter;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.*;
 import java.nio.ByteBuffer;
 
 class SyslogAvroWriter implements AutoCloseable {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(SyslogAvroWriter.class);
 
     private final DatumWriter<SyslogRecord> datumWriter =
             new SpecificDatumWriter<>(SyslogRecord.class);
@@ -44,7 +48,7 @@ class SyslogAvroWriter implements AutoCloseable {
         syncableFileOutputStream =
                 new SyncableFileOutputStream(syslogFile);
 
-        // System.out.println("debugging syslogFile, path is: " + syslogFile.getPath());
+        // LOGGER.debug("debugging syslogFile, path is: " + syslogFile.getPath());
         syncableFileOutputStream.getChannel().tryLock();
 
         if (syslogFile.length() == 0) {

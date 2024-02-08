@@ -106,7 +106,7 @@ public class KafkaController {
 
             // For testing purposes only. Stops the run when all the records are consumed from the mockConsumer during test.
             if (durationStatistics.getTotalRecords() > 0 & useMockKafkaConsumer) {
-                LOGGER.info("Processed all the test records. Closing.");
+                LOGGER.debug("Processed all the test records. Closing.");
                 keepRunning = false;
             }
 
@@ -184,7 +184,7 @@ public class KafkaController {
 
         // Activate all the found in-active topics, in other words create consumer groups for all of them using the createReader()-function.
         foundPartitions.forEach((k, v) -> {
-            LOGGER.info("Activating topic <"+k+">");
+            LOGGER.debug("Activating topic <"+k+">");
             try {
                 createReader(k, v, topicCounters);
                 activeTopics.add(k);
