@@ -23,6 +23,7 @@ import java.nio.file.Files;
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 public class CombinedFullTest {
 
@@ -109,10 +110,18 @@ public class CombinedFullTest {
 
         // TODO: Which timestamp should be used for pruning? The HDFS timestamp is easy to fetch and use but it is inaccurate especially for the first full cycle when the cfe_39 is first started.
         //  It would be much more heavy task to check the timestamps of the records that are stored in the file, rather than just checking the file timestamp.
+
+        // TODO: To bypass the issue of modification timestamps being inaccurate there is the method of altering the modification timestamps to mirror the timestamp of the records during the initial commit of the file:
+        fs.setTimes(new Path(path+"/"+0.8), Long.parseUnsignedLong("1675930598000"), -1); // where mtime is modification time and atime is access time. -1 as input parameter leaves the original atime/mtime value as is.
         FileStatus[] fileStatuses = fs.listStatus(new Path(newFolderPath + "/"));
         for (FileStatus a : fileStatuses) {
             Timestamp timestamp = new Timestamp(a.getModificationTime());
-            LOGGER.info("Timestamp for file " + a.getPath() + " is: " + timestamp);
+            String asfas = hdfsuri + "opt/teragrep/cfe_39/srv/testConsumerTopic/" + 0.8;
+            LOGGER.info(asfas);
+            if (Objects.equals(a.getPath().toString(), asfas)) {
+                Assertions.assertEquals(timestamp, new Timestamp(Long.parseUnsignedLong("1675930598000")));
+                LOGGER.info("testConsumerTopic/0.8 passed assertion test, timestamp was properly set to 1675930598000");
+            }
         }
         fs.close();
     }
