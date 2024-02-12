@@ -73,11 +73,11 @@ public class CombinedFullTest {
         kafkaController.run();
         // The avro files should be committed to HDFS now. Check the committed files for any errors.
         // There should be 20 files, 10 partitions with each having 2 files assigned to them.
-        /*try {
+        try {
             hdfsReadCheck();
         } catch (IOException e) {
             throw new RuntimeException(e);
-        }*/
+        }
     }
 
     @Test
@@ -108,10 +108,8 @@ public class CombinedFullTest {
             LOGGER.info("Path "+path+" created.");
         }
 
-        // TODO: Which timestamp should be used for pruning? The HDFS timestamp is easy to fetch and use but it is inaccurate especially for the first full cycle when the cfe_39 is first started.
-        //  It would be much more heavy task to check the timestamps of the records that are stored in the file, rather than just checking the file timestamp.
-
-        // TODO: To bypass the issue of modification timestamps being inaccurate there is the method of altering the modification timestamps to mirror the timestamp of the records during the initial commit of the file:
+        // TODO: Prune old records from database.
+        // One method is to use modification timestamp of the avro-file stored in HDFS:
         fs.setTimes(new Path(path+"/"+0.8), Long.parseUnsignedLong("1675930598000"), -1); // where mtime is modification time and atime is access time. -1 as input parameter leaves the original atime/mtime value as is.
         FileStatus[] fileStatuses = fs.listStatus(new Path(newFolderPath + "/"));
         for (FileStatus a : fileStatuses) {
@@ -121,8 +119,19 @@ public class CombinedFullTest {
             if (Objects.equals(a.getPath().toString(), asfas)) {
                 Assertions.assertEquals(timestamp, new Timestamp(Long.parseUnsignedLong("1675930598000")));
                 LOGGER.info("testConsumerTopic/0.8 passed assertion test, timestamp was properly set to 1675930598000");
+                // fs.delete(a.getPath(), true);
+                // If all the files have their modification timestamp altered to mirror the final record timestamp, it would be possible to prune the database based on the timestamps of the fileStatuses object.
             }
         }
+        // Another (most likely the best) method is to use MapReduce to prune the records in HDFS. MapReduce should allow the processing of the pruning to be efficient.
+
+        // TODO: Query handling
+        // The records are in this AVRO format:
+        // {"timestamp": 1650872092240000, "message": "25.04.2022 07:34:52.240 [WARN] com.teragrep.jla_02.Log4j2 [instanceId=01, thread=Thread-0, userId=, sessionId=, requestId=, SUBJECT=, VERB=, OBJECT=, OUTCOME=, message=Log4j2 warn audit says hi!]", "directory": "jla02logger", "stream": "test:jla02logger:0", "host": "jla-02.default", "input": "imrelp:cfe-06-0.cfe-06.default:", "partition": "8", "offset": 8, "origin": "jla-02.default"}
+        // Query handler must be implemented in a way that the AVRO files are first opened, then processed to syslog format and then sent to the query requester. The records are processed/filtered based on the given query conditions using MapReduce to make the code capable of processing the vast amounts of records that are expected.
+        // MapReduce functionalities of the Hadoop cluster: https://hadoop.apache.org/docs/stable/hadoop-mapreduce-client/hadoop-mapreduce-client-core/MapReduceTutorial.html
+
+
         fs.close();
     }
 
