@@ -24,6 +24,8 @@ import org.apache.hadoop.util.ToolRunner;
 
 import java.io.IOException;
 
+// TODO: This class should be compiled into a jar-file that is then sent to the hadoop cluster for running the job when needed. Maven should be configured to do the jar-packaging etc..
+
 /*
 The records are stored inside files that are 64MB in size and named depending on which Kafka partition offset the last stored record belongs to.
 In other words the files are inside topic_name-folder and there are at least one file per partition, depending on the load size of records that are fetched from Kafka topics.
@@ -43,20 +45,19 @@ topic_name/1.35 will contain records from between offsets 0 and 35. Only the rec
 
 Should the file be altered so the garbage data can be removed from the file? Or should the records only be filtered out when responding to queries with result sets?
 The filtering method is most likely the least resource intensive method as it can be done during the MapReduce, and the amount of garbage record shouldn't be too much. If the main function decides on the cutoff epoch, then it can also track it for the datasource function to use for filtering.
-But in any case the pruning should include deleting AVRO-files that hold only outdated records that should be pruned. The handling of the leftover garbage records can be handled later.
+But in any case the pruning should include deleting AVRO-files that hold only outdated records that should be pruned. The handling of the leftover garbage records can be handled later in the MapReduce of the datasource component queries.
 */
 
-// TODO: The main function that will call for pruning will know the topic name (aka. folder path). The pruning will be done in folder basis, aka. in topic basis, so tracking the topic name is not important for the MapReduce.
-//  Instead, the partition and offset values together with timestamp are important for pruning. The function should return a list of key-value pairs where key is the partition and value is the last offset that is outside of the given timestamp limit.
-//  The pruning of old records can be called in KafkaController.java row 112. This way the records are pruned every time new ones are added. Make sure there are no concurrency issues with the HDFS writer. Most likely there is a need for pruning-controller class that will manage the folder/topic scanning etc.
+// The main function that will call for pruning will know the topic name (aka. folder path). The pruning will be done in folder basis, aka. in topic basis, so tracking the topic name is not important for the MapReduce as the input path already contains the topic name.
+// Instead, the partition and offset values together with timestamp are important for pruning. The MapReduce function should create a list of key-value pairs where key is the partition+offset and value is the timestamp, where timestamp is smaller than the cutoff_epoch defined by input arguments.
+// The pruning of old records can be called in KafkaController.java row 112. This way the records are pruned every time new ones are added. Make sure there are no concurrency issues with the HDFS writer. Most likely there is a need for pruning-controller class that will manage the folder/topic scanning etc.
 public class PruneTest extends Configured implements Tool {
-    long cutoff_epoch = 0L;
-    // TODO: Change mapper in a way that it extracts timestamp from the input SyslogRecord.
-    // TimestampMapper takes a SyslogRecord as input and outputs a key-value pair based on the input.
+    static long cutoff_epoch;
+    // TimestampMapper takes a SyslogRecord as input and outputs a key-value pair of record partition+"."+offset and timestamp of the record.
     public static class TimestampMapper extends Mapper<AvroKey<SyslogRecord>, NullWritable, Text, LongWritable> {
         @Override
         public void map(AvroKey<SyslogRecord> key, NullWritable value, Context context) throws IOException, InterruptedException {
-            Long timestamp = key.datum().getTimestamp();
+            long timestamp = key.datum().getTimestamp();
             CharSequence partition = key.datum().getPartition();
             long offset = key.datum().getOffset();
             context.write(new Text(partition + "." + offset), new LongWritable(timestamp)); // Changed the output so the key will contain both the partition and offset (partition + "." + offset), while value will contain the timestamp. This way reduce can do the pruning with the mapper output.
@@ -64,15 +65,16 @@ public class PruneTest extends Configured implements Tool {
     }
 
 
-    public static class TimestampReducer extends Reducer<Text, LongWritable, AvroKey<CharSequence>, AvroValue<Integer>> {
+    public static class TimestampReducer extends Reducer<Text, LongWritable, AvroKey<CharSequence>, AvroValue<Long>> {
         @Override
         public void reduce(Text key, Iterable<LongWritable> values, Context context) throws IOException, InterruptedException {
-            // TODO: Filter the input (a list of key-value pairs where value is a timestamp) in a way that any value over X is filtered out of the key-value list.
-            long sum = 0;
+            long timestamp;
             for (LongWritable value : values) {
-                sum += value.get();
+                timestamp = value.get();
+                if (timestamp < cutoff_epoch) { // TODO: inclusive or exclusive? Exclusive for now.
+                    context.write(new AvroKey<CharSequence>(key.toString()), new AvroValue<Long>(timestamp));
+                }
             }
-            context.write(new AvroKey<CharSequence>(key.toString()), new AvroValue<Long>(sum)); // FIXME
         }
     }
 
@@ -108,8 +110,6 @@ public class PruneTest extends Configured implements Tool {
 
         return (job.waitForCompletion(true) ? 0 : 1);
     }
-
-    // TODO: Should there be more input parameters? Like topic name, a list of file names that hold the records, etc? That would open up a lot more leeway for coding the pruning algorithm using MapReduce.
 
     // Set input folder to be the topic folder.
     public static void main(String[] args) throws Exception {
