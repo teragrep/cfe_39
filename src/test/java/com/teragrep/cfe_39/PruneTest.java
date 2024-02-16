@@ -14,17 +14,20 @@ import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.io.Text;
+import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.mapreduce.Reducer;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
+import org.apache.hadoop.mapreduce.lib.input.FileSplit;
+import org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 
 import java.io.IOException;
 
-// TODO: This class should be compiled into a jar-file that is then sent to the hadoop cluster for running the job when needed. Maven should be configured to do the jar-packaging etc..
+// TODO: This class should be compiled into a jar-file that is then sent to the hadoop cluster for running the job when needed. Maven should be configured to do the jar-packaging etc.
 
 /*
 The records are stored inside files that are 64MB in size and named depending on which Kafka partition offset the last stored record belongs to.
@@ -57,6 +60,12 @@ public class PruneTest extends Configured implements Tool {
     public static class TimestampMapper extends Mapper<AvroKey<SyslogRecord>, NullWritable, Text, LongWritable> {
         @Override
         public void map(AvroKey<SyslogRecord> key, NullWritable value, Context context) throws IOException, InterruptedException {
+
+            // TODO: Add context.getInputSplit(); functionality to the mapper that allows tracking of the filenames that the records originate from.
+            // FIXME: Casting context.getInputSplit()).getPath() to FileSplit shouldn't work anymore with newer versions of hadoop. Input split class now returns TaggedInputSplit instead.
+            String filename = ((FileSplit) context.getInputSplit()).getPath().getName();
+            // If the FileSplit casting starts working for some reason on the newest version of MapReduce, it can be used to filter out only the specific filenames that should be deleted from HDFS. This way the size of the MapReduce output will be optimized and doesn't need any additional processing by the client.
+
             long timestamp = key.datum().getTimestamp();
             CharSequence partition = key.datum().getPartition();
             long offset = key.datum().getOffset();
@@ -65,6 +74,7 @@ public class PruneTest extends Configured implements Tool {
     }
 
 
+    // Removes all the key-timestamp pairs that have timestamp over the cutoff_epoch. What is left are list of keys (outdated records) that should be removed from the HDFS database.
     public static class TimestampReducer extends Reducer<Text, LongWritable, AvroKey<CharSequence>, AvroValue<Long>> {
         @Override
         public void reduce(Text key, Iterable<LongWritable> values, Context context) throws IOException, InterruptedException {
@@ -94,8 +104,8 @@ public class PruneTest extends Configured implements Tool {
         Job job = Job.getInstance(conf, "timestamp prune");
         job.setJarByClass(PruneTest.class);
 
-        FileInputFormat.setInputPaths(job, new Path(args[0])); // The input path should be the folder where the AVRO-files are held. setInputPaths can take either folder or file as input, not sure if using folder has the same effect as having a list of files.
-        FileOutputFormat.setOutputPath(job, new Path(args[1]));
+        SequenceFileInputFormat.setInputPaths(job, new Path(args[0])); // The input path should be the folder where the AVRO-files are held. setInputPaths can take either folder or file as input, not sure if using folder has the same effect as having a list of files.
+        FileOutputFormat.setOutputPath(job, new Path(args[1])); // Output path is where the results of the MapReduce are stored.
 
         job.setInputFormatClass(AvroKeyInputFormat.class);
         job.setMapperClass(TimestampMapper.class);
