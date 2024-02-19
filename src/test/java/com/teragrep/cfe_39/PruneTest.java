@@ -27,8 +27,9 @@ import org.apache.hadoop.util.ToolRunner;
 
 import java.io.IOException;
 
-// TODO: This class should be compiled into a jar-file that is then sent to the hadoop cluster for running the job when needed. Maven should be configured to do the jar-packaging etc.
+// Shelved for now. Using HDFS modification timestamps instead of avro-mapred for pruning the files.
 
+// This class should be compiled into a jar-file that is then sent to the hadoop cluster for running the job when needed. Maven should be configured to do the jar-packaging etc.
 /*
 The records are stored inside files that are 64MB in size and named depending on which Kafka partition offset the last stored record belongs to.
 In other words the files are inside topic_name-folder and there are at least one file per partition, depending on the load size of records that are fetched from Kafka topics.
@@ -53,7 +54,7 @@ But in any case the pruning should include deleting AVRO-files that hold only ou
 
 // The main function that will call for pruning will know the topic name (aka. folder path). The pruning will be done in folder basis, aka. in topic basis, so tracking the topic name is not important for the MapReduce as the input path already contains the topic name.
 // Instead, the partition and offset values together with timestamp are important for pruning. The MapReduce function should create a list of key-value pairs where key is the partition+offset and value is the timestamp, where timestamp is smaller than the cutoff_epoch defined by input arguments.
-// The pruning of old records can be called in KafkaController.java row 112. This way the records are pruned every time new ones are added. Make sure there are no concurrency issues with the HDFS writer. Most likely there is a need for pruning-controller class that will manage the folder/topic scanning etc.
+// The pruning of old records can be called in KafkaController.java row 112, using the activeTopics list as a input argument for topic names. This way the records are pruned every time new ones are added. Make sure there are no concurrency issues with the HDFS writer. Most likely there is a need for pruning-controller class that will manage the folder/topic scanning etc.
 public class PruneTest extends Configured implements Tool {
     static long cutoff_epoch;
     // TimestampMapper takes a SyslogRecord as input and outputs a key-value pair of record partition+"."+offset and timestamp of the record.

@@ -39,6 +39,8 @@ public class HDFSWriter implements AutoCloseable{
     private final String path;
     private final FileSystem fs;
     private final boolean useMockKafkaConsumer; // test-mode switch
+    private final Configuration conf;
+    private final String hdfsuri;
 
     // Create files as whole but stream the contents into them. Avro files 'flush' must be called as few times as possible. Check memory usage impact
     // Later make sure to check the avro file flush issue where the file size is all over the place if flush is not used after every append to the file.
@@ -53,7 +55,7 @@ public class HDFSWriter implements AutoCloseable{
 
         if (useMockKafkaConsumer) {
             // Code for initializing the class in test mode without kerberos.
-            String hdfsuri = config.getHdfsuri(); // Get from config.
+            hdfsuri = config.getHdfsuri(); // Get from config.
 
             // The filepath should be something like hdfs:///opt/teragrep/cfe_39/srv/topic_name/0.12345 where 12345 is offset and 0 the partition.
             // In other words the folder named topic_name holds files that are named and arranged based on partition and the partition's offset. Every partition has its own set of unique offset values.
@@ -62,7 +64,7 @@ public class HDFSWriter implements AutoCloseable{
             fileName = lastObject.partition+"."+lastObject.offset; // filename should be constructed from partition and offset.
 
             // ====== Init HDFS File System Object
-            Configuration conf = new Configuration();
+            conf = new Configuration();
             // Set FileSystem URI
             conf.set("fs.defaultFS", hdfsuri);
             // Because of Maven
@@ -81,7 +83,7 @@ public class HDFSWriter implements AutoCloseable{
 
         }else {
             // Code for initializing the class with kerberos.
-            String hdfsuri = config.getHdfsuri(); // Get from config.
+            hdfsuri = config.getHdfsuri(); // Get from config.
 
             // The filepath should be something like hdfs:///opt/teragrep/cfe_39/srv/topic_name/0.12345 where 12345 is offset and 0 the partition.
             // In other words the folder named topic_name holds files that are named and arranged based on partition and the partition's offset. Every partition has its own set of unique offset values.
@@ -98,7 +100,7 @@ public class HDFSWriter implements AutoCloseable{
             System.setProperty("java.security.krb5.realm", config.getKerberosRealm());
             System.setProperty("java.security.krb5.kdc", config.getKerberosHost());
 
-            Configuration conf = new Configuration();
+            conf = new Configuration();
 
             // enable kerberus
             conf.set("hadoop.security.authentication", config.getHadoopAuthentication());
@@ -126,7 +128,7 @@ public class HDFSWriter implements AutoCloseable{
     }
 
     // Method for committing the AVRO-file to HDFS
-    public void commit(File syslogFile) {
+    public void commit(File syslogFile, long epochMicros_last) {
         // The code for writing the file to HDFS should be same for both test (non-kerberized access) and prod (kerberized access).
         if (useMockKafkaConsumer) {
             // CODE FOR TEST-MODE GOES HERE!
@@ -150,19 +152,23 @@ public class HDFSWriter implements AutoCloseable{
                     throw new RuntimeException("File " + fileName + " already exists");
                 }
 
-                //Init output stream
+                /*//Init output stream
                 FSDataOutputStream outputStream = fs.create(hdfswritepath);
                 // Write the file contents of syslogFile to hdfswritepath in HDFS.
                 // file to bytes[]
 
-                /*byte[] bytearray = new byte[(int) syslogFile.length()];
+                *//*byte[] bytearray = new byte[(int) syslogFile.length()];
                 try (FileInputStream inputStream = new FileInputStream(syslogFile)) {
                     inputStream.read(bytearray);
-                }*/
+                }*//*
                 byte[] bytes = Files.readAllBytes(Paths.get(syslogFile.getPath())); // if readAllBytes is not efficient use FileInputStream
                 outputStream.write(bytes);
+                outputStream.close();*/
 
-                outputStream.close();
+                Path path = new Path(syslogFile.getPath());
+                fs.copyFromLocalFile(path, hdfswritepath);
+                fs.setTimes(hdfswritepath, epochMicros_last, -1); // where mtime is modification time and atime is access time. -1 as input parameter leaves the original atime/mtime value as is.
+                // updateTimestamp(hdfswritepath, epochMicros_last);
                 LOGGER.debug("End Write file into hdfs");
                 boolean delete = syslogFile.delete(); // deletes the avro-file from the local disk now that it has been committed to HDFS.
                 LOGGER.debug("\n" + "File committed to HDFS, file writepath should be: " + hdfswritepath.toString() + "\n");
@@ -214,15 +220,28 @@ public class HDFSWriter implements AutoCloseable{
         }
     }
 
+    private void updateTimestamp(Path hdfswritepath, long epochMicros_last) {
+        // Testing timestamp editing. The new timestamp should be the timestamp of the last record that was added to the AVRO-file.
+        try {
+            FileSystem fs_temp = FileSystem.get(URI.create(hdfsuri), conf);
+            FSDataOutputStream fsDataOutputStream = fs_temp.create(hdfswritepath);
+            fs_temp.setTimes(hdfswritepath, epochMicros_last, -1); // where mtime is modification time and atime is access time. -1 as input parameter leaves the original atime/mtime value as is.
+            fsDataOutputStream.close();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
     // try-with-resources handles closing the filesystem automatically.
     public void close() {
-        if (fs != null) {
+        // FIXME: fs.close() doesn't just affect the current class, it affects all the FileSystem objects that were created using FileSystem.get(URI.create(hdfsuri), conf); in different threads.
+        /*if (fs != null) {
             try {
                 fs.close();
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }
-        }
+        }*/
     }
 
 

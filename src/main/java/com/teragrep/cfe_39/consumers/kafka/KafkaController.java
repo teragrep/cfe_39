@@ -27,6 +27,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 
+import java.io.IOException;
 import java.sql.SQLException;
 import java.time.Duration;
 import java.util.*;
@@ -103,7 +104,17 @@ public class KafkaController {
             durationStatistics.log();
             long topicScanDelay = 30000L;
             Thread.sleep(topicScanDelay);
-
+            for (String topic_name : activeTopics) {
+                LOGGER.info("topic that is being bruned: " + topic_name);
+                if (topic_name != null) {
+                    try {
+                        HDFSPrune hdfsPrune = new HDFSPrune(config, topic_name);
+                        hdfsPrune.prune();
+                    } catch (IOException e) {
+                        throw new RuntimeException(e);
+                    }
+                }
+            }
             // For testing purposes only. Stops the run when all the records are consumed from the mockConsumer during test.
             if (durationStatistics.getTotalRecords() > 0 & useMockKafkaConsumer) {
                 LOGGER.debug("Processed all the test records. Closing.");

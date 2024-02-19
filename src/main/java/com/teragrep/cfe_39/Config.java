@@ -66,6 +66,7 @@ public class Config {
     private final int numOfConsumers;
 
     // TODO: Set up configuration check for important parameters. Remove old unused parameters.
+    // TODO: Implement cutoff_offset parameter get/set for pruning.
 
     Config() throws IOException {
         Properties properties = new Properties();
