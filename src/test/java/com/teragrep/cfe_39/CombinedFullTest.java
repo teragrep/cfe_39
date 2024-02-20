@@ -72,12 +72,15 @@ public class CombinedFullTest {
         kafkaController.run();
         // The avro files should be committed to HDFS now. Check the committed files for any errors.
         // There should be 20 files, 10 partitions with each having 2 files assigned to them.
-        // TODO: hdfsReadCheck(); does not work properly if pruning is enabled. Add checks for pruning etc.
-        /*try {
-            hdfsReadCheck();
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }*/
+        // hdfsReadCheck(); does not work properly if pruning is enabled and prune offset is set too low, which causes the records to be pruned from the database.
+        if (config.getPrune_offset() == 157784760000L) {
+            try {
+                hdfsReadCheck();
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        }
+
     }
 
     @Test
@@ -108,7 +111,7 @@ public class CombinedFullTest {
             LOGGER.info("Path "+path+" created.");
         }
 
-        // TODO: Use either HDFS-file modification timestamps or avro-mapred for pruning.
+        // Use either HDFS-file modification timestamps or avro-mapred for pruning.
 
         // The records are in this AVRO format:
         // {"timestamp": 1650872092240000, "message": "25.04.2022 07:34:52.240 [WARN] com.teragrep.jla_02.Log4j2 [instanceId=01, thread=Thread-0, userId=, sessionId=, requestId=, SUBJECT=, VERB=, OBJECT=, OUTCOME=, message=Log4j2 warn audit says hi!]", "directory": "jla02logger", "stream": "test:jla02logger:0", "host": "jla-02.default", "input": "imrelp:cfe-06-0.cfe-06.default:", "partition": "8", "offset": 8, "origin": "jla-02.default"}
@@ -116,26 +119,33 @@ public class CombinedFullTest {
         // MapReduce functionalities of the Hadoop cluster: https://hadoop.apache.org/docs/stable/hadoop-mapreduce-client/hadoop-mapreduce-client-core/MapReduceTutorial.html
         // Avro side of documentations for MapReduce: https://avro.apache.org/docs/1.11.1/mapreduce-guide/
 
-
-
         // Another method for pruning aside using avro-mapred is to use modification timestamp of the avro-file stored in HDFS:
         // fs.setTimes(new Path(path+"/"+0.8), Long.parseUnsignedLong("1675930598000"), -1);
         // where mtime is modification time and atime is access time. -1 as input parameter leaves the original atime/mtime value as is.
         FileStatus[] fileStatuses = fs.listStatus(new Path(newFolderPath + "/"));
         long count = Arrays.stream(fileStatuses).count();
         if (count != 0) {
+            if (config.getPrune_offset() != 157784760000L) {
+                Assertions.fail("There are files available in the database when there should be none.");
+            }
+            boolean delete = false;
             for (FileStatus a : fileStatuses) {
                 // If all the files have their modification timestamp altered to mirror the final record timestamp, it is possible to prune the database based on the timestamps of the fileStatuses object.
                 long convert = TimeUnit.MILLISECONDS.convert(a.getModificationTime(), TimeUnit.MICROSECONDS); // MICROSECONDS ARE NOT SUPPORTED, convert the microsecond epoch to milliseconds.
                 // Delete old files
                 if (convert < 1708343921000L) {
-                    boolean delete = fs.delete(a.getPath(), true);
+                    delete = fs.delete(a.getPath(), true);
                     Assertions.assertTrue(delete);
                     LOGGER.info("Deleted file " + a.getPath());
                 }
             }
+            Assertions.assertTrue(delete);
+            LOGGER.info("All files were pruned properly.");
         }else {
-            LOGGER.info("No files available!");
+            if (config.getPrune_offset() == 157784760000L) {
+                Assertions.fail("There were no files available in the database when there should be.");
+            }
+            LOGGER.info("No files available as they were pruned properly already!");
         }
 
         fs.close();
@@ -236,6 +246,7 @@ public class CombinedFullTest {
                 } else {
                     Assertions.assertEquals("{\"timestamp\": 1650872092243000, \"message\": \"25.04.2022 07:34:52.243 [ERROR] com.teragrep.jla_02.Log4j2 [instanceId=01, thread=Thread-0, userId=, sessionId=, requestId=, SUBJECT=, VERB=, OBJECT=, OUTCOME=, message=Log4j2 error metric says hi!]\", \"directory\": \"jla02logger\", \"stream\": \"test:jla02logger:0\", \"host\": \"jla-02.default\", \"input\": \"imrelp:cfe-06-0.cfe-06.default:\", \"partition\": \"" + partitionCounter + "\", \"offset\": 13, \"origin\": \"jla-02.default\"}", record.toString());
                     looper = 0;
+                    LOGGER.info("Partition " + partitionCounter + " passed assertions.");
                     partitionCounter++;
                 }
             }

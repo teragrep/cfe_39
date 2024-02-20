@@ -62,8 +62,8 @@ public class HDFSPrune {
             fs.mkdirs(newFolderPath);
             LOGGER.info("Path "+path+" created.");
         }
-
-        cutoff_epoch = System.currentTimeMillis() - 172800000L; // TODO: cutoff offset is 172800000L only for testing, parametrize it using Config.java.
+        long pruneOffset = config.getPrune_offset();
+        cutoff_epoch = System.currentTimeMillis() - pruneOffset; // pruneOffset is parametrized in Config.java. Default value is 2 days in milliseconds.
     }
 
     public void prune() throws IOException {

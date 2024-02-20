@@ -31,25 +31,10 @@ import java.util.Enumeration;
 import java.util.Properties;
 
 public class Config {
-
-/*    // db
-    private final String dbConnectionUrl;
-    private final String dbUsername;
-    private final String dbPassword;*/
-
     // kafka
     private final String queueTopicPattern;
-
     private final Properties kafkaConsumerProperties;
-
-    private final boolean replicationEnabled;
-    private final int streamSize;
-    private final String streamUnits;
     private static final Logger LOGGER = LoggerFactory.getLogger(Config.class);
-    private final int dropPartitionsOlderThanHours;
-    private final int createPartitionsInAdvanceHours;
-    private final boolean overrideTableLocation;
-    private final String tableLocation;
     private final String hdfsPath;
     private String hdfsuri;
     private final String queueDirectory;
@@ -64,9 +49,9 @@ public class Config {
     private final String kerberosTestMode;
     private long maximumFileSize;
     private final int numOfConsumers;
+    private final long prune_offset;
 
     // TODO: Set up configuration check for important parameters. Remove old unused parameters.
-    // TODO: Implement cutoff_offset parameter get/set for pruning.
 
     Config() throws IOException {
         Properties properties = new Properties();
@@ -75,49 +60,17 @@ public class Config {
         properties.load(Files.newInputStream(configPath));
         LOGGER.debug("Got configuration: " + properties);
 
-        /*// db
-        this.dbConnectionUrl = properties.getProperty("db.connectionUrl");
-        if (this.dbConnectionUrl == null) {
-            throw new IllegalArgumentException("db.connectionUrl not set");
-        }
-        this.dbUsername = properties.getProperty("db.username");
-        if (this.dbUsername == null) {
-            throw new IllegalArgumentException("db.username not set");
-        }
-        this.dbPassword = properties.getProperty("db.password");
-        if (this.dbPassword == null) {
-            throw new IllegalArgumentException("db.password not set");
-        }*/
-
-        String replicationEnabledString = properties.getProperty("db.replicationEnabled", "false");
-        this.replicationEnabled = Boolean.parseBoolean(replicationEnabledString);
-
-        String streamBytesString = properties.getProperty("db.streamSize", "512");
-        this.streamSize = Integer.parseInt(streamBytesString);
-        this.streamUnits = properties.getProperty("db.streamUnits", "rows");
-        this.dropPartitionsOlderThanHours = Integer.parseInt(properties.getProperty("db.dropPartitionsOlderThanHours", "4"));
-        if(dropPartitionsOlderThanHours <= 0) {
-            throw new IllegalArgumentException("db.dropPartitionsOlderThanHours must be set to >0, got " + dropPartitionsOlderThanHours);
-        }
-        this.createPartitionsInAdvanceHours = Integer.parseInt(properties.getProperty("db.createPartitionsInAdvanceHours", "8"));
-        if(createPartitionsInAdvanceHours <= 0) {
-            throw new IllegalArgumentException("createPartitionsInAdvanceHours must be set to >0, got " + createPartitionsInAdvanceHours);
-        }
-
-        String overrideTableLocationString = properties.getProperty("db.overrideTableLocation", "false");
-        this.overrideTableLocation = Boolean.parseBoolean(overrideTableLocationString);
-        this.tableLocation = properties.getProperty("db.tableLocation");
-        if(overrideTableLocation && tableLocation.isEmpty()) {
-            throw new IllegalArgumentException("db.tableLocation resulted in empty string when db.overrideTableLocation was true");
-        }
-
         // HDFS
         this.hdfsPath = properties.getProperty("hdfsPath", "hdfs:///opt/teragrep/cfe_39/srv/");
         this.hdfsuri = properties.getProperty("hdfsuri", "hdfs://localhost:45937/");
 
+        // HDFS pruning
+        this.prune_offset = Long.parseLong(properties.getProperty("prune_offset", "172800000"));
+
         // AVRO
         this.queueDirectory = properties.getProperty("queueDirectory", "");
         this.queueNamePrefix = properties.getProperty("queueNamePrefix", "");
+        this.maximumFileSize = Long.parseLong(properties.getProperty("maximumFileSize", "60800000"));
 
         // kerberos
         this.kerberosHost = properties.getProperty("java.security.krb5.kdc", "");
@@ -143,7 +96,6 @@ public class Config {
             throw new IOException("File '" + loginConfig + "' set by java.security.auth.login.config does not exist");
         }
         System.setProperty("java.security.auth.login.config", loginConfig);
-        this.maximumFileSize = 60800000; // default value
 
         // Just for loggers to work
         Path log4j2Config = Paths.get(properties.getProperty("log4j2.configurationFile", System.getProperty("user.dir") + "/etc/log4j2.properties"));
@@ -166,26 +118,6 @@ public class Config {
         return subProperties;
     }
 
-    public boolean isOverrideTableLocation() {
-        return overrideTableLocation;
-    }
-
-    public String getTableLocation() {
-        return tableLocation;
-    }
-
-/*    public String getDbConnectionUrl() {
-        return dbConnectionUrl;
-    }
-
-    public String getDbUsername() {
-        return dbUsername;
-    }
-
-    public String getDbPassword() {
-        return dbPassword;
-    }*/
-
     public String getHdfsPath() {
         return hdfsPath;
     }
@@ -202,33 +134,11 @@ public class Config {
     public String getQueueNamePrefix() {
         return queueNamePrefix;
     }
-
-    public boolean isReplicationEnabled() {
-        return replicationEnabled;
-    }
-
-    public int getStreamSize() {
-        return streamSize;
-    }
-
-    public String getStreamUnits() {
-        return streamUnits;
-    }
-
     public String getQueueTopicPattern() {
         return queueTopicPattern;
     }
-
     public Properties getKafkaConsumerProperties() {
         return kafkaConsumerProperties;
-    }
-
-    public int getDropPartitionsOlderThanHours() {
-        return dropPartitionsOlderThanHours;
-    }
-
-    public int getCreatePartitionsInAdvanceHours() {
-        return createPartitionsInAdvanceHours;
     }
     public String getKerberosHost() {
         return kerberosHost;
@@ -262,5 +172,8 @@ public class Config {
     }
     public int getNumOfConsumers() {
         return numOfConsumers;
+    }
+    public long getPrune_offset() {
+        return prune_offset;
     }
 }
