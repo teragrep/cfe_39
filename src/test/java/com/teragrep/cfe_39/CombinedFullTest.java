@@ -39,11 +39,11 @@ public class CombinedFullTest {
         try {
             config = new Config();
         } catch (IOException e){
-            LOGGER.error("Can't load config: " + e);
-            System.exit(1);
+            LOGGER.error("Can't load config: {}", e.toString());
+            Assertions.fail();
         } catch (IllegalArgumentException e) {
-            LOGGER.error("Got invalid config: " + e);
-            System.exit(1);
+            LOGGER.error("Got invalid config: {}", e.toString());
+            Assertions.fail();
         }
         // Create a HDFS miniCluster
         baseDir = Files.createTempDirectory("test_hdfs").toFile().getAbsoluteFile();
@@ -73,7 +73,7 @@ public class CombinedFullTest {
         // The avro files should be committed to HDFS now. Check the committed files for any errors.
         // There should be 20 files, 10 partitions with each having 2 files assigned to them.
         // hdfsReadCheck(); does not work properly if pruning is enabled and prune offset is set too low, which causes the records to be pruned from the database.
-        if (config.getPrune_offset() == 157784760000L) {
+        if (config.getPruneOffset() == 157784760000L) {
             try {
                 hdfsReadCheck();
             } catch (IOException e) {
@@ -108,7 +108,7 @@ public class CombinedFullTest {
         if(!fs.exists(newFolderPath)) {
             // Create new Directory
             fs.mkdirs(newFolderPath);
-            LOGGER.info("Path "+path+" created.");
+            LOGGER.info("Path {} created.", path);
         }
 
         // Use either HDFS-file modification timestamps or avro-mapred for pruning.
@@ -125,7 +125,7 @@ public class CombinedFullTest {
         FileStatus[] fileStatuses = fs.listStatus(new Path(newFolderPath + "/"));
         long count = Arrays.stream(fileStatuses).count();
         if (count != 0) {
-            if (config.getPrune_offset() != 157784760000L) {
+            if (config.getPruneOffset() != 157784760000L) {
                 Assertions.fail("There are files available in the database when there should be none.");
             }
             boolean delete = false;
@@ -136,13 +136,13 @@ public class CombinedFullTest {
                 if (convert < 1708343921000L) {
                     delete = fs.delete(a.getPath(), true);
                     Assertions.assertTrue(delete);
-                    LOGGER.info("Deleted file " + a.getPath());
+                    LOGGER.info("Deleted file {}", a.getPath());
                 }
             }
             Assertions.assertTrue(delete);
             LOGGER.info("All files were pruned properly.");
         }else {
-            if (config.getPrune_offset() == 157784760000L) {
+            if (config.getPruneOffset() == 157784760000L) {
                 Assertions.fail("There were no files available in the database when there should be.");
             }
             LOGGER.info("No files available as they were pruned properly already!");
@@ -175,7 +175,7 @@ public class CombinedFullTest {
         if(!fs.exists(newFolderPath)) {
             // Create new Directory
             fs.mkdirs(newFolderPath);
-            LOGGER.info("Path "+path+" created.");
+            LOGGER.info("Path {} created.", path);
         }
 
         // This is the HDFS write path for the files:
@@ -199,7 +199,7 @@ public class CombinedFullTest {
             //The data is in AVRO-format, so it can't be read as a string.
             DataFileStream<SyslogRecord> reader = new DataFileStream<>(inputStream, new SpecificDatumReader<>(SyslogRecord.class));
             SyslogRecord record = null;
-            LOGGER.info("\nReading records from file " + hdfsreadpath.toString() + ":");
+            LOGGER.info("\nReading records from file {}:", hdfsreadpath.toString());
             while (reader.hasNext()) {
                 record = reader.next(record);
                 LOGGER.info(record.toString());
@@ -246,7 +246,7 @@ public class CombinedFullTest {
                 } else {
                     Assertions.assertEquals("{\"timestamp\": 1650872092243000, \"message\": \"25.04.2022 07:34:52.243 [ERROR] com.teragrep.jla_02.Log4j2 [instanceId=01, thread=Thread-0, userId=, sessionId=, requestId=, SUBJECT=, VERB=, OBJECT=, OUTCOME=, message=Log4j2 error metric says hi!]\", \"directory\": \"jla02logger\", \"stream\": \"test:jla02logger:0\", \"host\": \"jla-02.default\", \"input\": \"imrelp:cfe-06-0.cfe-06.default:\", \"partition\": \"" + partitionCounter + "\", \"offset\": 13, \"origin\": \"jla-02.default\"}", record.toString());
                     looper = 0;
-                    LOGGER.info("Partition " + partitionCounter + " passed assertions.");
+                    LOGGER.info("Partition {} passed assertions.", partitionCounter);
                     partitionCounter++;
                 }
             }

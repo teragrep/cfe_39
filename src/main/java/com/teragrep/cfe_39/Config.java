@@ -24,6 +24,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -49,7 +50,7 @@ public class Config {
     private final String kerberosTestMode;
     private long maximumFileSize;
     private final int numOfConsumers;
-    private final long prune_offset;
+    private final long pruneOffset;
 
     // TODO: Set up configuration check for important parameters. Remove old unused parameters.
 
@@ -57,15 +58,18 @@ public class Config {
         Properties properties = new Properties();
         Path configPath = Paths.get(System.getProperty("cfe_30.config.location", System.getProperty("user.dir") + "/etc/application.properties"));
         LOGGER.info("Loading application config '" + configPath.toAbsolutePath() + "'");
-        properties.load(Files.newInputStream(configPath));
-        LOGGER.debug("Got configuration: " + properties);
+
+        try(InputStream inputStream = Files.newInputStream(configPath)) {
+            properties.load(inputStream);
+            LOGGER.debug("Got configuration: " + properties);
+        }
 
         // HDFS
         this.hdfsPath = properties.getProperty("hdfsPath", "hdfs:///opt/teragrep/cfe_39/srv/");
         this.hdfsuri = properties.getProperty("hdfsuri", "hdfs://localhost:45937/");
 
         // HDFS pruning
-        this.prune_offset = Long.parseLong(properties.getProperty("prune_offset", "172800000"));
+        this.pruneOffset = Long.parseLong(properties.getProperty("pruneOffset", "172800000"));
 
         // AVRO
         this.queueDirectory = properties.getProperty("queueDirectory", "");
@@ -173,7 +177,7 @@ public class Config {
     public int getNumOfConsumers() {
         return numOfConsumers;
     }
-    public long getPrune_offset() {
-        return prune_offset;
+    public long getPruneOffset() {
+        return pruneOffset;
     }
 }

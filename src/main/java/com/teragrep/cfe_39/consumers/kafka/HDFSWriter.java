@@ -128,7 +128,7 @@ public class HDFSWriter implements AutoCloseable{
     }
 
     // Method for committing the AVRO-file to HDFS
-    public void commit(File syslogFile, long epochMicros_last) {
+    public void commit(File syslogFile, long lastEpochMicros) {
         // The code for writing the file to HDFS should be same for both test (non-kerberized access) and prod (kerberized access).
         if (useMockKafkaConsumer) {
             // CODE FOR TEST-MODE GOES HERE!
@@ -141,7 +141,7 @@ public class HDFSWriter implements AutoCloseable{
                 if (!fs.exists(newFolderPath)) {
                     // Create new Directory
                     fs.mkdirs(newFolderPath);
-                    LOGGER.debug("Path "+path+" created.");
+                    LOGGER.debug("Path {} created.", path);
                 }
 
                 //==== Write file
@@ -167,11 +167,11 @@ public class HDFSWriter implements AutoCloseable{
 
                 Path path = new Path(syslogFile.getPath());
                 fs.copyFromLocalFile(path, hdfswritepath);
-                fs.setTimes(hdfswritepath, epochMicros_last, -1); // where mtime is modification time and atime is access time. -1 as input parameter leaves the original atime/mtime value as is.
-                // updateTimestamp(hdfswritepath, epochMicros_last);
+                fs.setTimes(hdfswritepath, lastEpochMicros, -1); // where mtime is modification time and atime is access time. -1 as input parameter leaves the original atime/mtime value as is.
+                // updateTimestamp(hdfswritepath, lastEpochMicros);
                 LOGGER.debug("End Write file into hdfs");
                 boolean delete = syslogFile.delete(); // deletes the avro-file from the local disk now that it has been committed to HDFS.
-                LOGGER.debug("\n" + "File committed to HDFS, file writepath should be: " + hdfswritepath.toString() + "\n");
+                LOGGER.debug("\nFile committed to HDFS, file writepath should be: {}\n", hdfswritepath.toString());
 
             } catch (IOException e) {
                 throw new RuntimeException(e);
@@ -186,7 +186,7 @@ public class HDFSWriter implements AutoCloseable{
                 if (!fs.exists(newFolderPath)) {
                     // Create new Directory
                     fs.mkdirs(newFolderPath);
-                    LOGGER.debug("Path "+path+" created.");
+                    LOGGER.debug("Path {} created.", path);
                 }
 
                 //==== Write file
@@ -212,7 +212,7 @@ public class HDFSWriter implements AutoCloseable{
                 outputStream.close();
                 LOGGER.debug("End Write file into hdfs");
                 boolean delete = syslogFile.delete(); // deletes the avro-file from the local disk now that it has been committed to HDFS.
-                LOGGER.debug("\n" + "File committed to HDFS, file writepath should be: " + hdfswritepath.toString() + "\n");
+                LOGGER.debug("\nFile committed to HDFS, file writepath should be: {}\n", hdfswritepath.toString());
 
             } catch (IOException e) {
                 throw new RuntimeException(e);
@@ -220,12 +220,12 @@ public class HDFSWriter implements AutoCloseable{
         }
     }
 
-    private void updateTimestamp(Path hdfswritepath, long epochMicros_last) {
+    private void updateTimestamp(Path hdfswritepath, long lastEpochMicros) {
         // Testing timestamp editing. The new timestamp should be the timestamp of the last record that was added to the AVRO-file.
         try {
             FileSystem fs_temp = FileSystem.get(URI.create(hdfsuri), conf);
             FSDataOutputStream fsDataOutputStream = fs_temp.create(hdfswritepath);
-            fs_temp.setTimes(hdfswritepath, epochMicros_last, -1); // where mtime is modification time and atime is access time. -1 as input parameter leaves the original atime/mtime value as is.
+            fs_temp.setTimes(hdfswritepath, lastEpochMicros, -1); // where mtime is modification time and atime is access time. -1 as input parameter leaves the original atime/mtime value as is.
             fsDataOutputStream.close();
         } catch (IOException e) {
             throw new RuntimeException(e);

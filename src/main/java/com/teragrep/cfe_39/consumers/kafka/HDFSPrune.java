@@ -38,7 +38,7 @@ public class HDFSPrune {
     private Config config;
     private final FileSystem fs;
     private Path newFolderPath;
-    private long cutoff_epoch;
+    private long cutOffEpoch;
     private final boolean useMockKafkaConsumer; // test-mode switch
 
     public HDFSPrune(Config config, String topicName) throws IOException {
@@ -52,8 +52,7 @@ public class HDFSPrune {
         if (useMockKafkaConsumer) {
             this.config = config;
             String hdfsuri = config.getHdfsuri();
-
-            String path = config.getHdfsPath() + "/" + topicName;
+            String path = config.getHdfsPath().concat("/").concat(topicName);
             // ====== Init HDFS File System Object
             Configuration conf = new Configuration();
             // Set FileSystem URI
@@ -73,7 +72,7 @@ public class HDFSPrune {
             if (!fs.exists(newFolderPath)) {
                 // Create new Directory
                 fs.mkdirs(newFolderPath);
-                LOGGER.info("Path " + path + " created.");
+                LOGGER.info("Path {} created.", path);
             }
         }else {
             // Code for initializing the class with kerberos.
@@ -116,24 +115,28 @@ public class HDFSPrune {
             if (!fs.exists(newFolderPath)) {
                 // Create new Directory
                 fs.mkdirs(newFolderPath);
-                LOGGER.info("Path " + path + " created.");
+                LOGGER.info("Path {} created.", path);
             }
         }
-        long pruneOffset = config.getPrune_offset();
-        cutoff_epoch = System.currentTimeMillis() - pruneOffset; // pruneOffset is parametrized in Config.java. Default value is 2 days in milliseconds.
+        long pruneOffset = config.getPruneOffset();
+        cutOffEpoch = System.currentTimeMillis() - pruneOffset; // pruneOffset is parametrized in Config.java. Default value is 2 days in milliseconds.
     }
 
     public void prune() throws IOException {
         // Fetch the filestatuses of HDFS files.
         FileStatus[] fileStatuses = fs.listStatus(new Path(newFolderPath + "/"));
+        if (fileStatuses.length > 0) {
         for (FileStatus a : fileStatuses) {
             // If all the files have their modification timestamp altered to mirror the final record timestamp, it is possible to prune the database based on the timestamps of the fileStatuses object.
             long convert = TimeUnit.MILLISECONDS.convert(a.getModificationTime(), TimeUnit.MICROSECONDS); // MICROSECONDS ARE NOT SUPPORTED, convert the microsecond epoch to milliseconds.
             // Delete old files
-            if (convert < cutoff_epoch) {
+            if (convert < cutOffEpoch) {
                 boolean delete = fs.delete(a.getPath(), true);
                 LOGGER.info("Deleted file " + a.getPath());
             }
+        }
+        } else {
+            LOGGER.info("No files found in folder {}", new Path(newFolderPath + "/"));
         }
     }
 }
