@@ -56,7 +56,7 @@ public class DatabaseOutput implements Consumer<List<RecordOffsetObject>> {
     public static final String ANSI_GREEN = "\u001B[32m";
     public static final String ANSI_BLUE = "\u001B[34m";
     private SyslogAvroWriter syslogAvroWriter;
-//    private final long minimumFreeSpace; // TODO: Check if needs to be implemented to the code.
+    //    private final long minimumFreeSpace; // TODO: Check if needs to be implemented to the code.
     private final long maximumFileSize;
     private final WritableQueue writableQueue;
     private final ByteBuffer sourceConcatenationBuffer;
@@ -71,7 +71,7 @@ public class DatabaseOutput implements Consumer<List<RecordOffsetObject>> {
     private final SDVector originHostname;
     private File syslogFile;
     private final Config config;
-//    private long approximatedSize; // FIXME: Not working properly when flush() is not used after append in the AVRO-file.
+    //    private long approximatedSize; // FIXME: Not working properly when flush() is not used after append in the AVRO-file.
     private long epochMicros_last;
 
     DatabaseOutput(
@@ -85,7 +85,7 @@ public class DatabaseOutput implements Consumer<List<RecordOffsetObject>> {
         this.durationStatistics = durationStatistics;
         this.topicCounter = topicCounter;
 //        this.minimumFreeSpace = 32000000; // TODO: CHECK RIGHT VALUE FOR minimumFreeSpace
-        this.maximumFileSize = config.getMaximumFileSize();; // Maximum file size should be 64M (64000000). 60800000 is 95% of 64M which should be a good approximation point.
+        this.maximumFileSize = config.getMaximumFileSize(); // Maximum file size should be 64M (64000000). 60800000 is 95% of 64M which should be a good approximation point.
 
         // queueDirectory and queueNamePrefix are only used for temporarily storing the AVRO-serialized files before committing them to HDFS when the file size reaches the threshold (or all records are processed).
         this.writableQueue = new WritableQueue(
@@ -120,7 +120,7 @@ public class DatabaseOutput implements Consumer<List<RecordOffsetObject>> {
                 }
 
                 // This part defines a new empty file to which the new AVRO-serialized records are stored until it again hits the 64M size limit.
-                writableQueue.setQueueNamePrefix(recordOffsetObject.topic+recordOffsetObject.partition);
+                writableQueue.setQueueNamePrefix(recordOffsetObject.getTopic()+recordOffsetObject.getPartition());
                 syslogFile = writableQueue.getNextWritableFile();
                 syslogAvroWriter = new SyslogAvroWriter(syslogFile);
 //                approximatedSize = syslogAvroWriter.getFileSize(); // resets the size approximation.
@@ -160,14 +160,14 @@ public class DatabaseOutput implements Consumer<List<RecordOffsetObject>> {
         //  When the file size is about to go above 64M, commit the file into HDFS using the latest topic/partition/offset values as the filename and start fresh with a new empty AVRO-file.
         //  Serialize the object that was going to make the file go above 64M into the now empty AVRO-file and continue the loop.
         // TODO: If the prod-environment recordOffsetObjectList ordering is different from what it is in the test environment, add a function that reorders the list based on partition and offset (or better yet, make several AVRO-files that are being used at the same time rather than doing it one AVRO-file at a time as the offset ordering within partitions should always be correct in all scenarios).
-        RecordOffsetObject lastObject = null;
+        OffsetObject lastObject = new NullOffsetObject(); // Abstract OffsetObject class, set to null object before initializing as RecordOffsetObject.
         long start = Instant.now().toEpochMilli(); // Starts measuring performance here. Measures how long it takes to process the whole recordOffsetObjectList.
         // This loop goes through all the records of the mock data in a single session.
         for (RecordOffsetObject recordOffsetObject : recordOffsetObjectList) {
-            // Initializing syslogAvroWriter.
-            if (syslogAvroWriter == null) {
+            // Initializing syslogAvroWriter and lastObject.
+            if (syslogAvroWriter == null && lastObject.isNull()) {
                 try {
-                    writableQueue.setQueueNamePrefix(recordOffsetObject.topic+recordOffsetObject.partition);
+                    writableQueue.setQueueNamePrefix(recordOffsetObject.getTopic()+recordOffsetObject.getPartition());
                     syslogFile =
                             writableQueue.getNextWritableFile();
                     //  The HDFS filename is only finalized when the AVRO-serialized file is finalized, because every Kafka-record added to the file is going to change the offset that is going to be used for the filename.
@@ -179,35 +179,32 @@ public class DatabaseOutput implements Consumer<List<RecordOffsetObject>> {
                 }
             } else {
                 try {
-                    // check if new partition
-                    assert lastObject != null;
-                    if (lastObject.topic.equals(recordOffsetObject.topic) & lastObject.partition.equals(recordOffsetObject.partition)) {
+                    if (lastObject.getTopic().equals(recordOffsetObject.getTopic()) & lastObject.getPartition().equals(recordOffsetObject.getPartition())) {
                         // Records left to consume in the current partition.
-                        boolean b = committedToHdfs(syslogAvroWriter.getFileSize(), lastObject);
+                        boolean b = committedToHdfs(syslogAvroWriter.getFileSize(), (RecordOffsetObject) lastObject);
                         if (b) {
-                            LOGGER.debug("Target file size reached, file {} stored to {} in HDFS", syslogFile.getName(), lastObject.topic+"/"+lastObject.partition+"."+lastObject.offset);
-                        }else {
+                            LOGGER.debug("Target file size reached, file {} stored to {} in HDFS", syslogFile.getName(), lastObject.getTopic() + "/" + lastObject.getPartition() + "." + lastObject.getOffset());
+                        } else {
                             LOGGER.debug("Target file size not yet reached, continuing writing records to {}.", syslogFile.getName());
                         }
                     } else {
                         // Previous partition was fully consumed. Commit file to HDFS and create a new AVRO-file.
                         syslogAvroWriter.close();
-                        try (HDFSWriter writer = new HDFSWriter(config, lastObject)) {
-                            writer.commit(syslogFile, epochMicros_last);
-                        }
+                        HDFSWriter writer = new HDFSWriter(config, (RecordOffsetObject) lastObject);
+                        writer.commit(syslogFile, epochMicros_last);
 
                         // This part defines a new empty file to which the new AVRO-serialized records are stored until it again hits the 64M size limit.
-                        writableQueue.setQueueNamePrefix(recordOffsetObject.topic+recordOffsetObject.partition);
+                        writableQueue.setQueueNamePrefix(recordOffsetObject.getTopic() + recordOffsetObject.getPartition());
                         syslogFile = writableQueue.getNextWritableFile();
                         syslogAvroWriter = new SyslogAvroWriter(syslogFile);
-//                        approximatedSize = syslogAvroWriter.getFileSize(); // resets the size approximation.
+//                      approximatedSize = syslogAvroWriter.getFileSize(); // resets the size approximation.
                     }
                 } catch (IOException ioException) {
                     throw new UncheckedIOException(ioException);
                 }
             }
 
-            byte[] byteArray = recordOffsetObject.record; // loads the byte[] contained in recordOffsetObject.record to byteArray.
+            byte[] byteArray = recordOffsetObject.getRecord(); // loads the byte[] contained in recordOffsetObject.getRecord() to byteArray.
             batchBytes = batchBytes + byteArray.length;
             InputStream inputStream = new ByteArrayInputStream(byteArray);
             rfc5424Frame.load(inputStream);
@@ -248,8 +245,8 @@ public class DatabaseOutput implements Consumer<List<RecordOffsetObject>> {
                             .setStream(rfc5424Frame.structuredData.getValue(teragrepStreamName).toString()) // Or is sourcetype/stream supposed to be rfc5424Frame.appName.toString() instead?
                             .setHost(rfc5424Frame.hostname.toString())
                             .setInput(new String(source, StandardCharsets.UTF_8))
-                            .setPartition(recordOffsetObject.partition.toString())
-                            .setOffset(recordOffsetObject.offset)
+                            .setPartition(recordOffsetObject.getPartition().toString())
+                            .setOffset(recordOffsetObject.getOffset())
                             .setOrigin(new String(origin, StandardCharsets.UTF_8))
                             .build();
 
@@ -262,9 +259,9 @@ public class DatabaseOutput implements Consumer<List<RecordOffsetObject>> {
                     }
                     // Check if there is still room in syslogAvroWriter for another syslogRecord. Commit syslogAvroWriter to HDFS if no room left, emptying it out in the process.
                     // boolean b = committedToHdfs(approximatedSize + capacity, lastObject); // FIXME: approximatedSize is not working properly without the use of flush() after append. File sizes are all over the place.
-                    boolean b = committedToHdfs(syslogAvroWriter.getFileSize() + capacity, lastObject);
+                    boolean b = committedToHdfs(syslogAvroWriter.getFileSize() + capacity, (RecordOffsetObject) lastObject);
                     if (b) {
-                        LOGGER.debug("Target file size reached, file {} stored to {} in HDFS", syslogFile.getName(), lastObject.topic+"/"+lastObject.partition+"."+lastObject.offset);
+                        LOGGER.debug("Target file size reached, file {} stored to {} in HDFS", syslogFile.getName(), lastObject.getTopic()+"/"+lastObject.getPartition()+"."+lastObject.getOffset());
                     }else {
                         LOGGER.debug("Target file size not yet reached, continuing writing records to {}.", syslogFile.getName());
                     }
@@ -283,9 +280,9 @@ public class DatabaseOutput implements Consumer<List<RecordOffsetObject>> {
 
         // Handle the "leftover" syslogRecords from the loop.
         try {
-            if (syslogAvroWriter != null) {
+            if (syslogAvroWriter != null && !lastObject.isNull()) {
                 syslogAvroWriter.close();
-                try (HDFSWriter writer = new HDFSWriter(config, lastObject)) {
+                try (HDFSWriter writer = new HDFSWriter(config, (RecordOffsetObject) lastObject)) {
                     writer.commit(syslogFile, epochMicros_last); // commits the final AVRO-file to HDFS.
                 }
             }

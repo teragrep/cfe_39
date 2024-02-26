@@ -137,7 +137,7 @@ public class HdfsTest {
 
                 assert lastRecord != null;
                 RecordOffsetObject lastObject = new RecordOffsetObject("testConsumerTopic", Integer.parseInt(lastRecord.getPartition().toString()), lastRecord.getOffset(), null); // Fetch input parameters from the lastRecord SyslogRecord-object.
-                LOGGER.debug("\n"+"Last record in the " + syslogFile.getName() + " file:" + "\ntopic: " + lastObject.topic + "\npartition: " + lastObject.partition + "\noffset: " + lastObject.offset);
+                LOGGER.debug("\n"+"Last record in the " + syslogFile.getName() + " file:" + "\ntopic: " + lastObject.getTopic() + "\npartition: " + lastObject.getPartition() + "\noffset: " + lastObject.getOffset());
                 try (HDFSWriter writer = new HDFSWriter(config, lastObject)) {
                     writer.commit(syslogFile, -1L); // commits the final AVRO-file to HDFS.
                 } catch (IOException e) {
