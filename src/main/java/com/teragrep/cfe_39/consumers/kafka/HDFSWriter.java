@@ -167,7 +167,7 @@ public class HDFSWriter implements AutoCloseable{
 
                 Path path = new Path(syslogFile.getPath());
                 fs.copyFromLocalFile(path, hdfswritepath);
-                fs.setTimes(hdfswritepath, lastEpochMicros, -1); // where mtime is modification time and atime is access time. -1 as input parameter leaves the original atime/mtime value as is.
+                // fs.setTimes(hdfswritepath, lastEpochMicros, -1); // where mtime is modification time and atime is access time. -1 as input parameter leaves the original atime/mtime value as is.
                 // updateTimestamp(hdfswritepath, lastEpochMicros);
                 LOGGER.debug("End Write file into hdfs");
                 boolean delete = syslogFile.delete(); // deletes the avro-file from the local disk now that it has been committed to HDFS.

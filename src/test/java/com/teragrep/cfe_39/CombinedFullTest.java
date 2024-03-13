@@ -130,10 +130,8 @@ public class CombinedFullTest {
             }
             boolean delete = false;
             for (FileStatus a : fileStatuses) {
-                // If all the files have their modification timestamp altered to mirror the final record timestamp, it is possible to prune the database based on the timestamps of the fileStatuses object.
-                long convert = TimeUnit.MILLISECONDS.convert(a.getModificationTime(), TimeUnit.MICROSECONDS); // MICROSECONDS ARE NOT SUPPORTED, convert the microsecond epoch to milliseconds.
                 // Delete old files
-                if (convert < 1708343921000L) {
+                if (a.getModificationTime() < System.currentTimeMillis()) {
                     delete = fs.delete(a.getPath(), true);
                     Assertions.assertTrue(delete);
                     LOGGER.info("Deleted file {}", a.getPath());

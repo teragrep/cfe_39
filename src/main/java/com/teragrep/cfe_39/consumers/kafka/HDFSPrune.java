@@ -127,10 +127,8 @@ public class HDFSPrune {
         FileStatus[] fileStatuses = fs.listStatus(new Path(newFolderPath + "/"));
         if (fileStatuses.length > 0) {
         for (FileStatus a : fileStatuses) {
-            // If all the files have their modification timestamp altered to mirror the final record timestamp, it is possible to prune the database based on the timestamps of the fileStatuses object.
-            long convert = TimeUnit.MILLISECONDS.convert(a.getModificationTime(), TimeUnit.MICROSECONDS); // MICROSECONDS ARE NOT SUPPORTED, convert the microsecond epoch to milliseconds.
             // Delete old files
-            if (convert < cutOffEpoch) {
+            if (a.getModificationTime() < cutOffEpoch) {
                 boolean delete = fs.delete(a.getPath(), true);
                 LOGGER.info("Deleted file " + a.getPath());
             }
