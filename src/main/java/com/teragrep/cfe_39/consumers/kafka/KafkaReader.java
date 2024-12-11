@@ -45,31 +45,41 @@
  */
 package com.teragrep.cfe_39.consumers.kafka;
 
+import com.teragrep.cfe_39.configuration.CommonConfiguration;
 import org.apache.kafka.clients.consumer.*;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.*;
 
-public class KafkaReader implements AutoCloseable {
+public final class KafkaReader implements AutoCloseable {
 
-    final Logger LOGGER = LoggerFactory.getLogger(KafkaReader.class);
-    private Iterator<ConsumerRecord<byte[], byte[]>> kafkaRecordsIterator = Collections.emptyIterator();
+    private final Logger LOGGER = LoggerFactory.getLogger(KafkaReader.class);
+
+    private final CommonConfiguration config;
     private final Consumer<byte[], byte[]> kafkaConsumer;
-    private final java.util.function.Consumer<List<RecordOffset>> callbackFunction;
+    private final BatchDistributionImpl callbackFunction;
+    private final ConsumerRebalanceListenerImpl consumerRebalanceListenerImpl;
+    private long lastTimeCalled;
 
     public KafkaReader(
             Consumer<byte[], byte[]> kafkaConsumer,
-            java.util.function.Consumer<List<RecordOffset>> callbackFunction
+            BatchDistributionImpl callbackFunction,
+            ConsumerRebalanceListenerImpl consumerRebalanceListenerImpl,
+            CommonConfiguration config
     ) {
         this.kafkaConsumer = kafkaConsumer;
         this.callbackFunction = callbackFunction;
+        this.consumerRebalanceListenerImpl = consumerRebalanceListenerImpl;
+        this.config = config;
+        this.lastTimeCalled = Instant.now().toEpochMilli();
     }
 
     public void read() {
-        long offset;
+        Iterator<ConsumerRecord<byte[], byte[]>> kafkaRecordsIterator = Collections.emptyIterator();
         if (!kafkaRecordsIterator.hasNext()) {
             // still need to consume more, infinitely loop because connection problems may cause return of an empty iterator
             ConsumerRecords<byte[], byte[]> kafkaRecords = kafkaConsumer.poll(Duration.ofSeconds(60));
@@ -79,21 +89,31 @@ public class KafkaReader implements AutoCloseable {
             kafkaRecordsIterator = kafkaRecords.iterator();
         }
 
-        List<RecordOffset> recordOffsetObjectList = new ArrayList<>();
+        List<KafkaRecordImpl> recordOffsetObjectList = new ArrayList<>();
         while (kafkaRecordsIterator.hasNext()) {
             ConsumerRecord<byte[], byte[]> record = kafkaRecordsIterator.next();
             if (LOGGER.isDebugEnabled()) {
                 LOGGER.debug("adding from offset: <{}>", record.offset());
             }
             recordOffsetObjectList
-                    .add(new RecordOffset(record.topic(), record.partition(), record.offset(), record.value()));
+                    .add(new KafkaRecordImpl(record.topic(), record.partition(), record.offset(), record.value()));
         }
 
         if (!recordOffsetObjectList.isEmpty()) {
-            /* This is the DatabaseOutput.accept() function.
-             Offset and other required data for HDFS storage are added to the input parameters of the accept() function which processes the consumed record.*/
+            /* This is the BatchDistributionImpl.accept() function.
+             KafkaRecord and other required data for HDFS storage are added to the input parameters of the accept() function which processes the consumed record.*/
             callbackFunction.accept(recordOffsetObjectList);
-            kafkaConsumer.commitSync();
+            kafkaConsumer.commitAsync();
+            lastTimeCalled = Instant.now().toEpochMilli();
+        }
+        else {
+            // If no new kafka record batches is received for a while, use callbackFunction.accept() with empty recordOffsetObjectList to flush records that have already been committed in kafka to HDFS.
+            long thisTime = Instant.now().toEpochMilli();
+            long ftook = thisTime - lastTimeCalled;
+            if (ftook > config.consumerTimeout()) {
+                callbackFunction.accept(recordOffsetObjectList);
+                lastTimeCalled = Instant.now().toEpochMilli();
+            }
         }
     }
 

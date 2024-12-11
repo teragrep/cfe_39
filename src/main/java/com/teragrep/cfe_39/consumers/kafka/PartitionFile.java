@@ -45,11 +45,16 @@
  */
 package com.teragrep.cfe_39.consumers.kafka;
 
-public interface Offset {
+import java.io.IOException;
 
-    boolean isNull();
+public interface PartitionFile {
 
-    byte[] getRecord();
+    public abstract void addRecord(KafkaRecordImpl kafkaRecord);
 
-    String offsetToJSON();
+    public abstract void commitRecords() throws IOException;
+
+    public abstract void writeToHdfsEarly() throws IOException;
+
+    public abstract void delete();
+
 }

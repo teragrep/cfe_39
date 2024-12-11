@@ -45,54 +45,51 @@
  */
 package com.teragrep.cfe_39.consumers.kafka;
 
-import com.teragrep.cfe_39.configuration.HdfsConfiguration;
-import org.apache.hadoop.fs.FileStatus;
-import org.apache.hadoop.fs.FileSystem;
-import org.apache.hadoop.fs.Path;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import com.teragrep.cfe_39.avro.SyslogRecord;
+import org.apache.kafka.common.TopicPartition;
 
-import java.io.IOException;
+import java.io.ByteArrayInputStream;
+import java.io.InputStream;
 
-public final class HDFSPrune {
+// This is the class for handling the Kafka record topic/partition/offset data that are required for HDFS storage.
+public final class KafkaRecordImpl implements KafkaRecord {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(HDFSPrune.class);
-    private final FileSystem fs;
-    private final Path newDirectoryPath;
-    private final long cutOffEpoch;
+    private final String topic;
+    private final int partition;
+    private final long offset;
+    private final byte[] record;
 
-    public HDFSPrune(HdfsConfiguration config, String topicName, FileSystem fs) throws IOException {
-        this.fs = fs;
-        String path = config.hdfsPath().concat("/").concat(topicName);
-        //==== Create directory if not exists
-        Path workingDir = fs.getWorkingDirectory();
-        newDirectoryPath = new Path(path);
-        if (!fs.exists(newDirectoryPath)) {
-            // Create new Directory
-            fs.mkdirs(newDirectoryPath);
-            LOGGER.info("Path <{}> created.", path);
-        }
-        long pruneOffset = config.pruneOffset();
-        cutOffEpoch = System.currentTimeMillis() - pruneOffset; // pruneOffset is parametrized in Config.java. Default value is 2 days in milliseconds.
+    public KafkaRecordImpl(String topic, int partition, long offset, byte[] record) {
+        this.topic = topic;
+        this.partition = partition;
+        this.offset = offset;
+        this.record = record;
     }
 
-    public int prune() throws IOException {
-        int deleted = 0;
-        // Fetch the filestatuses of HDFS files.
-        FileStatus[] fileStatuses = fs.listStatus(new Path(newDirectoryPath + "/"));
-        if (fileStatuses.length > 0) {
-            for (FileStatus fileStatus : fileStatuses) {
-                // Delete old files
-                if (fileStatus.getModificationTime() < cutOffEpoch) {
-                    boolean delete = fs.delete(fileStatus.getPath(), true);
-                    LOGGER.info("Deleted file <{}>", fileStatus.getPath());
-                    deleted++;
-                }
-            }
+    @Override
+    public long size() {
+        if (record == null) {
+            return 0;
         }
         else {
-            LOGGER.info("No files found in directory <{}>", new Path(newDirectoryPath + "/"));
+            return record.length;
         }
-        return deleted;
     }
+
+    @Override
+    public TopicPartition topicPartition() {
+        return new TopicPartition(topic, partition);
+    }
+
+    @Override
+    public long offset() {
+        return this.offset;
+    }
+
+    @Override
+    public SyslogRecord toSyslogRecord() {
+        InputStream inputStream = new ByteArrayInputStream(record);
+        return new KafkaAsSyslogRecord().toSyslogRecord(inputStream, String.valueOf(partition), offset);
+    }
+
 }

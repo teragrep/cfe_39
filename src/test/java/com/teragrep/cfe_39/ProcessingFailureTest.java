@@ -45,8 +45,10 @@
  */
 package com.teragrep.cfe_39;
 
-import com.teragrep.cfe_39.consumers.kafka.DatabaseOutput;
-import com.teragrep.cfe_39.consumers.kafka.RecordOffset;
+import com.teragrep.cfe_39.configuration.CommonConfiguration;
+import com.teragrep.cfe_39.configuration.HdfsConfiguration;
+import com.teragrep.cfe_39.consumers.kafka.BatchDistributionImpl;
+import com.teragrep.cfe_39.consumers.kafka.KafkaRecordImpl;
 import com.teragrep.cfe_39.metrics.DurationStatistics;
 import com.teragrep.cfe_39.metrics.topic.TopicCounter;
 import org.apache.hadoop.fs.FileSystem;
@@ -65,9 +67,10 @@ import java.io.File;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 
@@ -78,21 +81,51 @@ public class ProcessingFailureTest {
 
     private static MiniDFSCluster hdfsCluster;
     private static File baseDir;
-    private static Config config;
+    private static CommonConfiguration config;
+    private static HdfsConfiguration hdfsConfig;
     private FileSystem fs;
 
     // Prepares known state for testing.
     @BeforeEach
     public void startMiniCluster() {
         assertDoesNotThrow(() -> {
-            // Set system properties to use the valid configuration with skipping of broken records disabled.
-            System
-                    .setProperty("cfe_39.config.location", System.getProperty("user.dir") + "/src/test/resources/failProcessing.application.properties");
-            config = new Config();
+            File queueDir = new File(System.getProperty("user.dir") + "/target/AVRO");
+            if (!queueDir.exists()) {
+                queueDir.mkdirs();
+            }
+            Map<String, String> map = new HashMap<>();
+            map.put("log4j2.configurationFile", "/opt/teragrep/cfe_39/etc/log4j2.properties");
+            map.put("egress.configurationFile", "/opt/teragrep/cfe_39/etc/egress.properties");
+            map.put("ingress.configurationFile", "/opt/teragrep/cfe_39/etc/ingress.properties");
+            map.put("queueDirectory", System.getProperty("user.dir") + "/target/AVRO/");
+            map.put("queueTopicPattern", "^testConsumerTopic-*$");
+            map.put("skipNonRFC5424Records", "false");
+            map.put("skipEmptyRFC5424Records", "false");
+            map.put("pruneOffset", "157784760000");
+            map.put("consumerTimeout", "600000");
+            config = new CommonConfiguration(map);
+
             // Create a HDFS miniCluster
             baseDir = Files.createTempDirectory("test_hdfs").toFile().getAbsoluteFile();
-            hdfsCluster = new TestMiniClusterFactory().create(config, baseDir);
-            fs = new TestFileSystemFactory().create(config.getHdfsuri());
+            hdfsCluster = new TestMiniClusterFactory().create(baseDir);
+            Map<String, String> hdfsMap = new HashMap<>();
+            hdfsMap.put("pruneOffset", "157784760000");
+            hdfsMap.put("hdfsuri", "hdfs://localhost:" + hdfsCluster.getNameNodePort() + "/");
+            hdfsMap.put("hdfsPath", "hdfs:///opt/teragrep/cfe_39/srv/");
+            hdfsMap.put("java.security.krb5.kdc", "test");
+            hdfsMap.put("java.security.krb5.realm", "test");
+            hdfsMap.put("hadoop.security.authentication", "false");
+            hdfsMap.put("hadoop.security.authorization", "test");
+            hdfsMap.put("dfs.namenode.kerberos.principal.pattern", "test");
+            hdfsMap.put("KerberosKeytabUser", "test");
+            hdfsMap.put("KerberosKeytabPath", "test");
+            hdfsMap.put("dfs.client.use.datanode.hostname", "false");
+            hdfsMap.put("hadoop.kerberos.keytab.login.autorenewal.enabled", "true");
+            hdfsMap.put("dfs.data.transfer.protection", "test");
+            hdfsMap.put("dfs.encrypt.data.transfer.cipher.suites", "test");
+            hdfsMap.put("maximumFileSize", "3000");
+            hdfsConfig = new HdfsConfiguration(hdfsMap);
+            fs = new TestFileSystemFactory().create(hdfsConfig.hdfsUri());
         });
     }
 
@@ -117,8 +150,9 @@ public class ProcessingFailureTest {
 
         assertDoesNotThrow(() -> {
 
-            Consumer<List<RecordOffset>> output = new DatabaseOutput(
+            BatchDistributionImpl output = new BatchDistributionImpl(
                     config, // Configuration settings
+                    hdfsConfig,
                     "topicName", // String, the name of the topic
                     durationStatistics, // RuntimeStatistics object from metrics
                     new TopicCounter("topicName") // TopicCounter object from metrics
@@ -132,19 +166,24 @@ public class ProcessingFailureTest {
                     "12>1 2022-04-25T07:34:50.806Z jla-02.default jla02logger - - [origin@48577 hostname=\"jla-02.default\"][event_id@48577 hostname=\"jla-02.default\" uuid=\"c3f13f9a-05e2-41bd-b0ad-1eca6fd6fd9a\" source=\"source\" unixtime=\"1650872090806\"][event_format@48577 original_format=\"rfc5424\"][event_node_relay@48577 hostname=\"cfe-06-0.cfe-06.default\" source=\"kafka-4.kafka.default.svc.cluster.local\" source_module=\"imrelp\"][event_version@48577 major=\"2\" minor=\"2\" hostname=\"cfe-06-0.cfe-06.default\" version_source=\"relay\"][event_node_router@48577 source=\"cfe-06-0.cfe-06.default.svc.cluster.local\" source_module=\"imrelp\" hostname=\"cfe-07-0.cfe-07.default\"][teragrep@48577 streamname=\"test:jla02logger:0\" directory=\"jla02logger\" unixtime=\"1650872090\"] [ERROR] 2022-04-25 07:34:50,806 com.teragrep.jla_02.Log4j Log - Log4j error says hi!"
                             .getBytes(StandardCharsets.UTF_8)
             );
-            RecordOffset recordOffsetObject = new RecordOffset(
+            KafkaRecordImpl recordOffsetObject = new KafkaRecordImpl(
                     record.topic(),
                     record.partition(),
                     record.offset(),
                     record.value()
             );
 
-            List<RecordOffset> recordOffsetObjectList = new ArrayList<>();
+            List<KafkaRecordImpl> recordOffsetObjectList = new ArrayList<>();
             recordOffsetObjectList.add(recordOffsetObject);
             Exception e = Assertions.assertThrows(Exception.class, () -> output.accept(recordOffsetObjectList));
             Assertions.assertEquals("com.teragrep.rlo_06.PriorityParseException: PRIORITY < missing", e.getMessage());
-            Assertions.assertFalse(fs.exists(new Path(config.getHdfsPath() + "/" + "topicName" + "/" + "0.1")));
+            Assertions.assertFalse(fs.exists(new Path(hdfsConfig.hdfsPath() + "/" + "topicName" + "/" + "0.1")));
             // No files stored to hdfs.
+
+            // Assert the local avro file that should e empty.
+            File queueDirectory = new File(config.queueDirectory());
+            File[] files = queueDirectory.listFiles();
+            Assertions.assertEquals(0, files.length); // Partition 0 avro-file shouldn't exist because there are no records left in the buffer.
         });
 
     }
@@ -160,8 +199,9 @@ public class ProcessingFailureTest {
 
         assertDoesNotThrow(() -> {
 
-            Consumer<List<RecordOffset>> output = new DatabaseOutput(
+            BatchDistributionImpl output = new BatchDistributionImpl(
                     config, // Configuration settings
+                    hdfsConfig,
                     "topicName", // String, the name of the topic
                     durationStatistics, // RuntimeStatistics object from metrics
                     new TopicCounter("topicName") // TopicCounter object from metrics
@@ -174,20 +214,29 @@ public class ProcessingFailureTest {
                     "2022-04-25T07:34:50.806Z".getBytes(StandardCharsets.UTF_8),
                     null
             );
-            RecordOffset recordOffsetObject = new RecordOffset(
+            KafkaRecordImpl recordOffsetObject = new KafkaRecordImpl(
                     record.topic(),
                     record.partition(),
                     record.offset(),
                     record.value()
             );
 
-            List<RecordOffset> recordOffsetObjectList = new ArrayList<>();
+            List<KafkaRecordImpl> recordOffsetObjectList = new ArrayList<>();
             recordOffsetObjectList.add(recordOffsetObject);
-            NullPointerException e = Assertions
-                    .assertThrows(NullPointerException.class, () -> output.accept(recordOffsetObjectList));
-            Assertions.assertEquals("Record with null content detected during processing.", e.getMessage());
-            Assertions.assertFalse(fs.exists(new Path(config.getHdfsPath() + "/" + "topicName" + "/" + "0.1")));
+            RuntimeException e = Assertions
+                    .assertThrows(RuntimeException.class, () -> output.accept(recordOffsetObjectList));
+            Assertions
+                    .assertEquals(
+                            "java.lang.NullPointerException: Cannot read the array length because \"buf\" is null",
+                            e.getMessage()
+                    );
+            Assertions.assertFalse(fs.exists(new Path(hdfsConfig.hdfsPath() + "/" + "topicName" + "/" + "0.1")));
             // No files stored to hdfs.
+
+            // Assert the local avro file that should be empty.
+            File queueDirectory = new File(config.queueDirectory());
+            File[] files = queueDirectory.listFiles();
+            Assertions.assertEquals(0, files.length); // Partition 0 avro-file shouldn't exist because there are no records left in the buffer.
         });
 
     }

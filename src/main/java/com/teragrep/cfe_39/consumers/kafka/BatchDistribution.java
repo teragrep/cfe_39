@@ -45,54 +45,10 @@
  */
 package com.teragrep.cfe_39.consumers.kafka;
 
-import com.teragrep.cfe_39.configuration.HdfsConfiguration;
-import org.apache.hadoop.fs.FileStatus;
-import org.apache.hadoop.fs.FileSystem;
-import org.apache.hadoop.fs.Path;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import java.util.List;
+import java.util.function.Consumer;
 
-import java.io.IOException;
+public interface BatchDistribution extends Consumer<List<KafkaRecordImpl>> {
 
-public final class HDFSPrune {
-
-    private static final Logger LOGGER = LoggerFactory.getLogger(HDFSPrune.class);
-    private final FileSystem fs;
-    private final Path newDirectoryPath;
-    private final long cutOffEpoch;
-
-    public HDFSPrune(HdfsConfiguration config, String topicName, FileSystem fs) throws IOException {
-        this.fs = fs;
-        String path = config.hdfsPath().concat("/").concat(topicName);
-        //==== Create directory if not exists
-        Path workingDir = fs.getWorkingDirectory();
-        newDirectoryPath = new Path(path);
-        if (!fs.exists(newDirectoryPath)) {
-            // Create new Directory
-            fs.mkdirs(newDirectoryPath);
-            LOGGER.info("Path <{}> created.", path);
-        }
-        long pruneOffset = config.pruneOffset();
-        cutOffEpoch = System.currentTimeMillis() - pruneOffset; // pruneOffset is parametrized in Config.java. Default value is 2 days in milliseconds.
-    }
-
-    public int prune() throws IOException {
-        int deleted = 0;
-        // Fetch the filestatuses of HDFS files.
-        FileStatus[] fileStatuses = fs.listStatus(new Path(newDirectoryPath + "/"));
-        if (fileStatuses.length > 0) {
-            for (FileStatus fileStatus : fileStatuses) {
-                // Delete old files
-                if (fileStatus.getModificationTime() < cutOffEpoch) {
-                    boolean delete = fs.delete(fileStatus.getPath(), true);
-                    LOGGER.info("Deleted file <{}>", fileStatus.getPath());
-                    deleted++;
-                }
-            }
-        }
-        else {
-            LOGGER.info("No files found in directory <{}>", new Path(newDirectoryPath + "/"));
-        }
-        return deleted;
-    }
+    public abstract void rebalance();
 }

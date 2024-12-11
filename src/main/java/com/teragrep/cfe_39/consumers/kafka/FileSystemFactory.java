@@ -45,21 +45,12 @@
  */
 package com.teragrep.cfe_39.consumers.kafka;
 
-// Null object design pattern, used to create null offset objects.
-public final class NullOffset implements Offset {
+import org.apache.hadoop.fs.FileSystem;
 
-    @Override
-    public boolean isNull() {
-        return true;
-    }
+import java.io.IOException;
 
-    @Override
-    public byte[] getRecord() {
-        return new byte[0];
-    }
+public interface FileSystemFactory {
 
-    @Override
-    public String offsetToJSON() {
-        return "{\"topic\":\"Not available\", \"partition\":0, \"offset\":0}";
-    }
+    public abstract FileSystem create(boolean initializeUGI) throws IOException;
+
 }

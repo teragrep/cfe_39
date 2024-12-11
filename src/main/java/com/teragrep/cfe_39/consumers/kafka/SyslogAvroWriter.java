@@ -57,23 +57,20 @@ import org.slf4j.LoggerFactory;
 
 import java.io.*;
 
-public class SyslogAvroWriter implements AutoCloseable {
+public final class SyslogAvroWriter implements AutoCloseable {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(SyslogAvroWriter.class);
 
-    private final DatumWriter<SyslogRecord> datumWriter = new SpecificDatumWriter<>(SyslogRecord.class);
-
+    private final DatumWriter<SyslogRecord> datumWriter;
     private final SyncableFileOutputStream syncableFileOutputStream;
-
-    private final DataFileWriter<SyslogRecord> dataFileWriter = new DataFileWriter<>(datumWriter);
+    private final DataFileWriter<SyslogRecord> dataFileWriter;
 
     public SyslogAvroWriter(File syslogFile) throws IOException {
+        datumWriter = new SpecificDatumWriter<>(SyslogRecord.class);
+        dataFileWriter = new DataFileWriter<>(datumWriter);
         dataFileWriter.setCodec(CodecFactory.snappyCodec());
-
-        syncableFileOutputStream = new SyncableFileOutputStream(syslogFile);
-
+        syncableFileOutputStream = new SyncableFileOutputStream(syslogFile, true);
         syncableFileOutputStream.getChannel().tryLock();
-
         if (syslogFile.length() == 0) {
             // new file
             dataFileWriter.create(SyslogRecord.getClassSchema(), syncableFileOutputStream);
@@ -98,7 +95,7 @@ public class SyslogAvroWriter implements AutoCloseable {
         dataFileWriter.close();
     }
 
-    public long getFileSize() throws IOException {
+    public long fileSize() throws IOException {
         return syncableFileOutputStream.getChannel().size();
     }
 }

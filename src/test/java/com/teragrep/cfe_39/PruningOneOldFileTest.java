@@ -45,6 +45,7 @@
  */
 package com.teragrep.cfe_39;
 
+import com.teragrep.cfe_39.configuration.HdfsConfiguration;
 import com.teragrep.cfe_39.consumers.kafka.HDFSPrune;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.FileUtil;
@@ -59,6 +60,8 @@ import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.nio.file.Files;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -71,24 +74,37 @@ public class PruningOneOldFileTest {
     private static final Logger LOGGER = LoggerFactory.getLogger(PruningOneOldFileTest.class);
     private static MiniDFSCluster hdfsCluster;
     private static File baseDir;
-    private static Config config;
+    private static HdfsConfiguration hdfsConfig;
     private FileSystem fs;
 
     // Prepares known state for testing.
     @BeforeEach
     public void startMiniCluster() {
         assertDoesNotThrow(() -> {
-            // Set system properties to use the valid configuration.
-            System
-                    .setProperty("cfe_39.config.location", System.getProperty("user.dir") + "/src/test/resources/valid.application.properties");
-            config = new Config();
             // Create a HDFS miniCluster
             baseDir = Files.createTempDirectory("test_hdfs").toFile().getAbsoluteFile();
-            hdfsCluster = new TestMiniClusterFactory().create(config, baseDir);
-            fs = new TestFileSystemFactory().create(config.getHdfsuri());
+            hdfsCluster = new TestMiniClusterFactory().create(baseDir);
+            Map<String, String> hdfsMap = new HashMap<>();
+            hdfsMap.put("pruneOffset", "157784760000");
+            hdfsMap.put("hdfsuri", "hdfs://localhost:" + hdfsCluster.getNameNodePort() + "/");
+            hdfsMap.put("hdfsPath", "hdfs:///opt/teragrep/cfe_39/srv/");
+            hdfsMap.put("java.security.krb5.kdc", "test");
+            hdfsMap.put("java.security.krb5.realm", "test");
+            hdfsMap.put("hadoop.security.authentication", "false");
+            hdfsMap.put("hadoop.security.authorization", "test");
+            hdfsMap.put("dfs.namenode.kerberos.principal.pattern", "test");
+            hdfsMap.put("KerberosKeytabUser", "test");
+            hdfsMap.put("KerberosKeytabPath", "test");
+            hdfsMap.put("dfs.client.use.datanode.hostname", "false");
+            hdfsMap.put("hadoop.kerberos.keytab.login.autorenewal.enabled", "true");
+            hdfsMap.put("dfs.data.transfer.protection", "test");
+            hdfsMap.put("dfs.encrypt.data.transfer.cipher.suites", "test");
+            hdfsMap.put("maximumFileSize", "3000");
+            hdfsConfig = new HdfsConfiguration(hdfsMap);
+            fs = new TestFileSystemFactory().create(hdfsConfig.hdfsUri());
 
             // Inserts a single pre-made avro-file with an olf timestamp to HDFS, which is normally generated during data ingestion from mock kafka consumer.
-            String path = config.getHdfsPath() + "/" + "testConsumerTopic"; // "hdfs:///opt/teragrep/cfe_39/srv/testConsumerTopic"
+            String path = hdfsConfig.hdfsPath() + "/" + "testConsumerTopic"; // "hdfs:///opt/teragrep/cfe_39/srv/testConsumerTopic"
             // Sets the directory where the data should be stored, if the directory doesn't exist then it's created.
             Path newDirectoryPath = new Path(path);
             // Create new Directory
@@ -129,21 +145,22 @@ public class PruningOneOldFileTest {
     @Test
     public void oneOldFileTest() {
         // This test case is for testing the functionality of the HDFSPrune.java when the database holds a file with a timestamp that should trigger pruning of old files.
-        Assertions.assertTrue(config.getPruneOffset() >= 300000L); // Fails the test if the config is not correct, too low pruning offset can prune the files if the test is lagging.
-        Assertions.assertTrue(System.currentTimeMillis() - config.getPruneOffset() > 157784760000L);
+        Assertions.assertTrue(hdfsConfig.pruneOffset() >= 300000L); // Fails the test if the config is not correct, too low pruning offset can prune the files if the test is lagging.
+        Assertions.assertTrue(System.currentTimeMillis() - hdfsConfig.pruneOffset() > 157784760000L);
 
         assertDoesNotThrow(() -> {
-            Assertions.assertTrue(fs.exists(new Path(config.getHdfsPath() + "/" + "testConsumerTopic")));
+            Assertions.assertTrue(fs.exists(new Path(hdfsConfig.hdfsPath() + "/" + "testConsumerTopic")));
             Assertions
-                    .assertEquals(1, fs.listStatus(new Path(config.getHdfsPath() + "/" + "testConsumerTopic")).length);
-            Assertions.assertTrue(fs.exists(new Path(config.getHdfsPath() + "/" + "testConsumerTopic" + "/" + "0.9")));
-            HDFSPrune hdfsPrune = new HDFSPrune(config, "testConsumerTopic", fs);
+                    .assertEquals(1, fs.listStatus(new Path(hdfsConfig.hdfsPath() + "/" + "testConsumerTopic")).length);
+            Assertions.assertTrue(fs.exists(new Path(hdfsConfig.hdfsPath() + "/" + "testConsumerTopic" + "/" + "0.9")));
+            HDFSPrune hdfsPrune = new HDFSPrune(hdfsConfig, "testConsumerTopic", fs);
             int deleted = hdfsPrune.prune();
             Assertions.assertEquals(1, deleted);
             // Also check with HDFS access if expected files still exist.
             Assertions
-                    .assertEquals(0, fs.listStatus(new Path(config.getHdfsPath() + "/" + "testConsumerTopic")).length);
-            Assertions.assertFalse(fs.exists(new Path(config.getHdfsPath() + "/" + "testConsumerTopic" + "/" + "0.9")));
+                    .assertEquals(0, fs.listStatus(new Path(hdfsConfig.hdfsPath() + "/" + "testConsumerTopic")).length);
+            Assertions
+                    .assertFalse(fs.exists(new Path(hdfsConfig.hdfsPath() + "/" + "testConsumerTopic" + "/" + "0.9")));
         });
     }
 }

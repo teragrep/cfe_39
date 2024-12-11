@@ -45,13 +45,12 @@
  */
 package com.teragrep.cfe_39.consumers.kafka;
 
-import com.teragrep.cfe_39.Config;
+import com.teragrep.cfe_39.configuration.CommonConfiguration;
+import com.teragrep.cfe_39.configuration.HdfsConfiguration;
+import com.teragrep.cfe_39.configuration.KafkaConfiguration;
 import com.teragrep.cfe_39.metrics.*;
 import com.teragrep.cfe_39.metrics.topic.TopicCounter;
 import org.apache.hadoop.fs.FileSystem;
-import org.apache.hadoop.fs.LocalFileSystem;
-import org.apache.hadoop.hdfs.DistributedFileSystem;
-import org.apache.hadoop.hdfs.HdfsConfiguration;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.common.PartitionInfo;
@@ -61,86 +60,57 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.net.URI;
 import java.sql.SQLException;
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 // Ingests data for HDFS database, periodically scans kafka for new topics based on config.getQueueTopicPattern() and creates kafka topic consumer groups for the new topics that will store the records to HDFS.
-public class HdfsDataIngestion {
+public final class HdfsDataIngestion {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(HdfsDataIngestion.class);
-    private final Config config;
+    private final CommonConfiguration config;
+    private final HdfsConfiguration hdfsConfig;
+    private final KafkaConfiguration kafkaConfig;
     private final org.apache.kafka.clients.consumer.Consumer<byte[], byte[]> kafkaConsumer;
     private final List<Thread> threads = new ArrayList<>();
     private final Set<String> activeTopics = new HashSet<>();
-    private boolean keepRunning;
-    private boolean useMockKafkaConsumer;
+    private final boolean useMockKafkaConsumer;
     private final int numOfConsumers;
-    private Map<TopicPartition, Long> hdfsStartOffsets;
-    private final FileSystem fs;
+    private final Map<TopicPartition, Long> hdfsStartOffsets;
 
-    public HdfsDataIngestion(Config config) throws IOException {
-        keepRunning = true;
+    public HdfsDataIngestion(
+            CommonConfiguration config,
+            HdfsConfiguration hdfsConfiguration,
+            KafkaConfiguration kafkaConfiguration
+    ) throws IOException {
         this.config = config;
-        Properties readerKafkaProperties = config.getKafkaConsumerProperties();
-        this.numOfConsumers = config.getNumOfConsumers();
-        this.useMockKafkaConsumer = Boolean
-                .parseBoolean(readerKafkaProperties.getProperty("useMockKafkaConsumer", "false"));
+        this.hdfsConfig = hdfsConfiguration;
+        this.kafkaConfig = kafkaConfiguration;
+        this.numOfConsumers = kafkaConfig.numOfConsumers();
+        this.useMockKafkaConsumer = kafkaConfiguration.useMockKafkaConsumer();
         if (useMockKafkaConsumer) {
-            this.kafkaConsumer = MockKafkaConsumerFactory.getConsumer(0); // A consumer used only for scanning the available topics to be allocated to consumers running in different threads (thus 0 as input parameter).
-            // Initializing the FileSystem with minicluster.
-            String hdfsuri = config.getHdfsuri();
-            // ====== Init HDFS File System Object
-            HdfsConfiguration conf = new HdfsConfiguration();
-            // Set FileSystem URI
-            conf.set("fs.defaultFS", hdfsuri);
-            // Because of Maven
-            conf.set("fs.hdfs.impl", org.apache.hadoop.hdfs.DistributedFileSystem.class.getName());
-            conf.set("fs.file.impl", org.apache.hadoop.fs.LocalFileSystem.class.getName());
-            // Set HADOOP user
-            System.setProperty("HADOOP_USER_NAME", "hdfs");
-            System.setProperty("hadoop.home.dir", "/");
-            //Get the filesystem - HDFS
-            fs = FileSystem.get(URI.create(hdfsuri), conf);
+            this.kafkaConsumer = new MockKafkaConsumerFactory(0).getConsumer(); // A consumer used only for scanning the available topics to be allocated to consumers running in different threads (thus 0 as input parameter).
         }
         else {
+            Properties kafkaProperties = new Properties();
+            kafkaProperties.put("bootstrap.servers", kafkaConfiguration.bootstrapServers());
+            kafkaProperties.put("auto.offset.reset", kafkaConfiguration.autoOffsetReset());
+            kafkaProperties.put("enable.auto.commit", kafkaConfiguration.enableAutoCommit());
+            kafkaProperties.put("group.id", kafkaConfiguration.groupId());
+            kafkaProperties.put("security.protocol", kafkaConfiguration.securityProtocol());
+            kafkaProperties.put("sasl.mechanism", kafkaConfiguration.saslMechanism());
+            kafkaProperties.put("max.poll.records", kafkaConfiguration.maxPollRecords());
+            kafkaProperties.put("fetch.max.bytes", kafkaConfiguration.fetchMaxBytes());
+            kafkaProperties.put("request.timeout.ms", kafkaConfiguration.requestTimeoutMs());
+            kafkaProperties.put("max.poll.interval.ms", kafkaConfiguration.maxPollIntervalMs());
             this.kafkaConsumer = new KafkaConsumer<>(
-                    config.getKafkaConsumerProperties(),
+                    kafkaProperties,
                     new ByteArrayDeserializer(),
                     new ByteArrayDeserializer()
             );
-            // Initializing the FileSystem with kerberos.
-            String hdfsuri = config.getHdfsuri(); // Get from config.
-            // set kerberos host and realm
-            System.setProperty("java.security.krb5.realm", config.getKerberosRealm());
-            System.setProperty("java.security.krb5.kdc", config.getKerberosHost());
-            HdfsConfiguration conf = new HdfsConfiguration();
-            // enable kerberus
-            conf.set("hadoop.security.authentication", config.getHadoopAuthentication());
-            conf.set("hadoop.security.authorization", config.getHadoopAuthorization());
-            conf.set("hadoop.kerberos.keytab.login.autorenewal.enabled", config.getKerberosLoginAutorenewal());
-            conf.set("fs.defaultFS", hdfsuri); // Set FileSystem URI
-            conf.set("fs.hdfs.impl", DistributedFileSystem.class.getName()); // Maven stuff?
-            conf.set("fs.file.impl", LocalFileSystem.class.getName()); // Maven stuff?
-            /* hack for running locally with fake DNS records
-             set this to true if overriding the host name in /etc/hosts*/
-            conf.set("dfs.client.use.datanode.hostname", config.getKerberosTestMode());
-            /* server principal
-             the kerberos principle that the namenode is using*/
-            conf.set("dfs.namenode.kerberos.principal.pattern", config.getKerberosPrincipal());
-            // set sasl
-            conf.set("dfs.data.transfer.protection", config.getDfsDataTransferProtection());
-            conf.set("dfs.encrypt.data.transfer.cipher.suites", config.getDfsEncryptDataTransferCipherSuites());
-            // set usergroup stuff
-            UserGroupInformation.setConfiguration(conf);
-            UserGroupInformation.loginUserFromKeytab(config.getKerberosKeytabUser(), config.getKerberosKeytabPath());
-            // filesystem for HDFS access is set here
-            fs = FileSystem.get(conf);
         }
         hdfsStartOffsets = new HashMap<>();
     }
@@ -154,17 +124,23 @@ public class HdfsDataIngestion {
         // register per topic counting
         List<TopicCounter> topicCounters = new CopyOnWriteArrayList<>();
 
+        // Initialize FileSystem
+        FileSystemFactoryImpl fileSystemFactoryImpl = new FileSystemFactoryImpl(hdfsConfig);
+        FileSystem fs = fileSystemFactoryImpl.create(true);
+
         // Generates offsets of the already committed records for Kafka and passes them to the kafka consumers.
-        try (HDFSRead hr = new HDFSRead(config, fs)) {
-            hdfsStartOffsets = hr.hdfsStartOffsets();
+        try (HDFSRead hr = new HDFSRead(hdfsConfig, fs)) {
+            hdfsStartOffsets.clear();
+            hdfsStartOffsets.putAll(hr.hdfsStartOffsets());
             LOGGER.debug("topicPartitionStartMap generated succesfully: <{}>", hdfsStartOffsets);
         }
         catch (IOException e) {
             throw new RuntimeException(e);
         }
 
+        boolean keepRunning = true;
         while (keepRunning) {
-            if ("kerberos".equals(config.getHadoopAuthentication())) {
+            if ("kerberos".equals(hdfsConfig.hadoopSecurityAuthentication())) {
                 UserGroupInformation.getLoginUser().checkTGTAndReloginFromKeytab();
             }
             LOGGER.debug("Scanning for threads");
@@ -178,7 +154,7 @@ public class HdfsDataIngestion {
                 LOGGER.info("topic that is being pruned: <{}>", topic_name);
                 if (topic_name != null) {
                     try {
-                        HDFSPrune hdfsPrune = new HDFSPrune(config, topic_name, fs);
+                        HDFSPrune hdfsPrune = new HDFSPrune(hdfsConfig, topic_name, fs);
                         hdfsPrune.prune();
                     }
                     catch (IOException e) {
@@ -210,17 +186,19 @@ public class HdfsDataIngestion {
 
         /* Every consumer is run in a separate thread.
          Consumer group is also handled here, and each consumer of the group runs on separate thread.*/
-        int numOfThreads = Math.min(numOfConsumers, listPartitionInfo.size()); // Makes sure that there aren't more consumers than available partitions in the consumer group.
-        for (int threadId = 1; numOfThreads >= threadId; threadId++) {
-            Consumer<List<RecordOffset>> output = new DatabaseOutput(
+        for (int threadId = 1; numOfConsumers >= threadId; threadId++) {
+            BatchDistributionImpl output = new BatchDistributionImpl(
                     config, // Configuration settings
+                    hdfsConfig,
                     topic, // String, the name of the topic
                     durationStatistics, // RuntimeStatistics object from metrics
                     topicCounter // TopicCounter object from metrics
             );
             ReadCoordinator readCoordinator = new ReadCoordinator(
                     topic,
-                    config.getKafkaConsumerProperties(),
+                    config,
+                    kafkaConfig,
+                    hdfsConfig,
                     output,
                     hdfsStartOffsets
             );
@@ -233,7 +211,7 @@ public class HdfsDataIngestion {
 
     private void topicScan(DurationStatistics durationStatistics, List<TopicCounter> topicCounters) {
         Map<String, List<PartitionInfo>> listTopics = kafkaConsumer.listTopics(Duration.ofSeconds(60));
-        Pattern topicsRegex = Pattern.compile(config.getQueueTopicPattern());
+        Pattern topicsRegex = Pattern.compile(config.queueTopicPattern());
         //         Find the topics available in Kafka based on given QueueTopicPattern, both active and in-active.
         Set<String> foundTopics = new HashSet<>();
         Map<String, List<PartitionInfo>> foundPartitions = new HashMap<>();
@@ -245,7 +223,7 @@ public class HdfsDataIngestion {
             }
         }
         if (foundTopics.isEmpty()) {
-            throw new IllegalStateException("Pattern <[" + config.getQueueTopicPattern() + "]> found no topics.");
+            throw new IllegalStateException("Pattern <[" + config.queueTopicPattern() + "]> found no topics.");
         }
         // subtract currently active topics from found topics
         foundTopics.removeAll(activeTopics);

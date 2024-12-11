@@ -55,15 +55,13 @@ import java.io.IOException;
 // Helper class for creating FileSystem objects.
 public class TestMiniClusterFactory {
 
-    public MiniDFSCluster create(Config config, File baseDir) throws IOException {
+    public MiniDFSCluster create(File baseDir) throws IOException {
         MiniDFSCluster hdfsCluster;
         // Create a HDFS miniCluster
         Configuration conf = new Configuration();
         conf.set(MiniDFSCluster.HDFS_MINIDFS_BASEDIR, baseDir.getAbsolutePath());
         MiniDFSCluster.Builder builder = new MiniDFSCluster.Builder(conf);
         hdfsCluster = builder.build();
-        String hdfsURI = "hdfs://localhost:" + hdfsCluster.getNameNodePort() + "/";
-        config.setHdfsuri(hdfsURI);
         DistributedFileSystem fileSystem = hdfsCluster.getFileSystem();
         return hdfsCluster;
     }

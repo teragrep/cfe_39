@@ -60,14 +60,15 @@ import java.util.function.BiPredicate;
 import java.util.function.ToLongFunction;
 import java.util.stream.Stream;
 
-public class WritableQueue {
+// UniqueFileCreated responsibility is to create a new File object that doesn't interfere with any existing files on the given directory.
+public class UniqueFileCreated {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(WritableQueue.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(UniqueFileCreated.class);
 
     private final Path queueDirectory;
-    private String queueNamePrefix;
+    private final String queueNamePrefix;
 
-    public WritableQueue(String queueDirectory, String queueNamePrefix) {
+    public UniqueFileCreated(String queueDirectory, String queueNamePrefix) {
         this.queueDirectory = Paths.get(queueDirectory);
         this.queueNamePrefix = queueNamePrefix;
         if (!Files.isDirectory(this.queueDirectory)) {
@@ -108,13 +109,9 @@ public class WritableQueue {
         }
     }
 
-    public void setQueueNamePrefix(String queueNamePrefix) {
-        this.queueNamePrefix = queueNamePrefix;
-    }
-
-    private BiPredicate<Path, BasicFileAttributes> getFileMatcher(String queueNamePrefix) {
+    private BiPredicate<Path, BasicFileAttributes> getFileMatcher(String queueNamePrefixInput) {
         return (path, basicFileAttributes) -> {
-            if (!path.getFileName().toString().startsWith(queueNamePrefix)) {
+            if (!path.getFileName().toString().startsWith(queueNamePrefixInput)) {
                 return false;
             }
             else if (path.getFileName().toString().endsWith(".state")) {

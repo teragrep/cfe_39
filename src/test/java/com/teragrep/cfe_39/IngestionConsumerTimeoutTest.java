@@ -50,29 +50,28 @@ import com.teragrep.cfe_39.configuration.CommonConfiguration;
 import com.teragrep.cfe_39.configuration.HdfsConfiguration;
 import com.teragrep.cfe_39.configuration.KafkaConfiguration;
 import com.teragrep.cfe_39.consumers.kafka.HdfsDataIngestion;
-import org.apache.avro.file.DataFileReader;
-import org.apache.avro.io.DatumReader;
+import org.apache.avro.file.DataFileStream;
 import org.apache.avro.specific.SpecificDatumReader;
-import org.apache.hadoop.fs.FileSystem;
-import org.apache.hadoop.fs.FileUtil;
-import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.*;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
-import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.DisabledIfSystemProperty;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.nio.file.Files;
-import java.util.*;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
+import java.util.HashMap;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 
-public class Ingestion1Old1NewFileTest {
+public class IngestionConsumerTimeoutTest {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(Ingestion1Old1NewFileTest.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(IngestionConsumerTimeoutTest.class);
     private static MiniDFSCluster hdfsCluster;
     private static File baseDir;
     private static CommonConfiguration config;
@@ -97,7 +96,7 @@ public class Ingestion1Old1NewFileTest {
             map.put("skipNonRFC5424Records", "true");
             map.put("skipEmptyRFC5424Records", "true");
             map.put("pruneOffset", "157784760000");
-            map.put("consumerTimeout", "600000");
+            map.put("consumerTimeout", "1000"); // Low consumerTimeout
             config = new CommonConfiguration(map);
 
             // Create a HDFS miniCluster
@@ -118,7 +117,7 @@ public class Ingestion1Old1NewFileTest {
             hdfsMap.put("hadoop.kerberos.keytab.login.autorenewal.enabled", "true");
             hdfsMap.put("dfs.data.transfer.protection", "test");
             hdfsMap.put("dfs.encrypt.data.transfer.cipher.suites", "test");
-            hdfsMap.put("maximumFileSize", "30000");
+            hdfsMap.put("maximumFileSize", "3000000");
             hdfsConfig = new HdfsConfiguration(hdfsMap);
             fs = new TestFileSystemFactory().create(hdfsConfig.hdfsUri());
 
@@ -137,36 +136,6 @@ public class Ingestion1Old1NewFileTest {
             kafkaMap.put("useMockKafkaConsumer", "true");
             kafkaMap.put("numOfConsumers", "2");
             kafkaConfig = new KafkaConfiguration(kafkaMap);
-
-            // Inserts pre-made avro-files to HDFS where one file has new timestamp and other old, which are normally generated during data ingestion from mock kafka consumer.
-            String path = hdfsConfig.hdfsPath() + "/" + "testConsumerTopic"; // "hdfs:///opt/teragrep/cfe_39/srv/testConsumerTopic"
-            // Sets the directory where the data should be stored, if the directory doesn't exist then it's created.
-            Path newDirectoryPath = new Path(path);
-            // Create new Directory
-            fs.mkdirs(newDirectoryPath);
-            LOGGER.debug("Path {} created.", path);
-            String dir = System.getProperty("user.dir") + "/src/test/resources/mockHdfsFiles";
-            Set<String> listOfFiles = Stream
-                    .of(Objects.requireNonNull(new File(dir).listFiles()))
-                    .filter(file -> !file.isDirectory())
-                    .map(File::getName)
-                    .collect(Collectors.toSet());
-            // Loop through all the avro files
-            for (String fileName : listOfFiles) {
-                String pathname = dir + "/" + fileName;
-                File avroFile = new File(pathname);
-                //==== Write file
-                LOGGER.debug("Begin Write file into hdfs");
-                //Create a path
-                Path hdfswritepath = new Path(newDirectoryPath + "/" + avroFile.getName()); // filename should be set according to the requirements: 0.12345 where 0 is Kafka partition and 12345 is Kafka offset.
-                Assertions.assertFalse(fs.exists(hdfswritepath));
-                Path readPath = new Path(avroFile.getPath());
-                fs.copyFromLocalFile(readPath, hdfswritepath);
-                LOGGER.debug("End Write file into hdfs");
-                LOGGER.debug("\nFile committed to HDFS, file writepath should be: {}\n", hdfswritepath);
-            }
-            fs.setTimes(new Path("hdfs:/opt/teragrep/cfe_39/srv/testConsumerTopic/0.9"), 157784760000L, -1);
-            fs.setTimes(new Path("hdfs:/opt/teragrep/cfe_39/srv/testConsumerTopic/0.13"), -1, -1);
         });
     }
 
@@ -185,59 +154,68 @@ public class Ingestion1Old1NewFileTest {
             matches = "true"
     )
     @Test
-    public void ingestion1Old1NewFileTest() {
-        /* This test case is for testing the functionality of the ingestion when there are files already present in the database before starting ingestion.
-         14 records are inserted to HDFS database before starting ingestion, with 126/160 records in mock kafka consumer ready for ingestion (20 broken records + 14 records already in HDFS).
-         Partitions through 1 to 9 will have a single local file each with each containing 14 records. Partition 0 will have 3 files, 0.9 and 0.13 in HDFS and one empty local file.
-         partition 0 HDFS files are pre-made and inserted to the HDFS database with old timestamp for file 0.9 and new for 0.13.
-         Old files are pruned from the database during ingestion topic scan loops.*/
-
+    public void ingestion0FilesTest() {
+        /*This test case is for testing the functionality of the consumerTimeout.*/
         assertDoesNotThrow(() -> {
-            // Assert the known starting state.
-            Assertions.assertTrue(fs.exists(new Path(hdfsConfig.hdfsPath() + "/" + "testConsumerTopic")));
-            Assertions
-                    .assertEquals(2, fs.listStatus(new Path(hdfsConfig.hdfsPath() + "/" + "testConsumerTopic")).length);
-            Assertions.assertTrue(fs.exists(new Path(hdfsConfig.hdfsPath() + "/" + "testConsumerTopic" + "/" + "0.9")));
-            Assertions
-                    .assertTrue(fs.exists(new Path(hdfsConfig.hdfsPath() + "/" + "testConsumerTopic" + "/" + "0.13")));
             Assertions.assertTrue(hdfsConfig.pruneOffset() >= 300000L); // Fails the test if the config is not correct.
-            Assertions.assertTrue((System.currentTimeMillis() - hdfsConfig.pruneOffset()) > 157784760000L);
+            Assertions.assertEquals(1000, config.consumerTimeout());
+            Assertions.assertEquals(3000000, hdfsConfig.maximumFileSize());
+            Assertions.assertFalse(fs.exists(new Path(hdfsConfig.hdfsPath() + "/" + "testConsumerTopic")));
             HdfsDataIngestion hdfsDataIngestion = new HdfsDataIngestion(config, hdfsConfig, kafkaConfig);
             hdfsDataIngestion.run();
+        });
 
-            // Assert that the kafka records were ingested and pruned correctly and the database holds only the expected 1 file.
-            Assertions
-                    .assertEquals(1, fs.listStatus(new Path(hdfsConfig.hdfsPath() + "/" + "testConsumerTopic")).length);
-            Assertions
-                    .assertFalse(fs.exists(new Path(hdfsConfig.hdfsPath() + "/" + "testConsumerTopic" + "/" + "0.9")));
+        // Assert that the kafka records were ingested correctly, HDFS should hold all the records even though maximumFileSize is set higher than expected file sizes.
+        assertDoesNotThrow(() -> {
+            String path = hdfsConfig.hdfsPath() + "/" + "testConsumerTopic";
+            Path newDirectoryPath = new Path(path);
+            Assertions.assertTrue(fs.exists(newDirectoryPath));
+
+            FileStatus[] fileStatuses = fs.listStatus(newDirectoryPath);
+            Assertions.assertEquals(10, fileStatuses.length);
             Assertions
                     .assertTrue(fs.exists(new Path(hdfsConfig.hdfsPath() + "/" + "testConsumerTopic" + "/" + "0.13")));
+            Assertions
+                    .assertTrue(fs.exists(new Path(hdfsConfig.hdfsPath() + "/" + "testConsumerTopic" + "/" + "1.13")));
+            Assertions
+                    .assertTrue(fs.exists(new Path(hdfsConfig.hdfsPath() + "/" + "testConsumerTopic" + "/" + "2.13")));
+            Assertions
+                    .assertTrue(fs.exists(new Path(hdfsConfig.hdfsPath() + "/" + "testConsumerTopic" + "/" + "3.13")));
+            Assertions
+                    .assertTrue(fs.exists(new Path(hdfsConfig.hdfsPath() + "/" + "testConsumerTopic" + "/" + "4.13")));
+            Assertions
+                    .assertTrue(fs.exists(new Path(hdfsConfig.hdfsPath() + "/" + "testConsumerTopic" + "/" + "5.13")));
+            Assertions
+                    .assertTrue(fs.exists(new Path(hdfsConfig.hdfsPath() + "/" + "testConsumerTopic" + "/" + "6.13")));
+            Assertions
+                    .assertTrue(fs.exists(new Path(hdfsConfig.hdfsPath() + "/" + "testConsumerTopic" + "/" + "7.13")));
+            Assertions
+                    .assertTrue(fs.exists(new Path(hdfsConfig.hdfsPath() + "/" + "testConsumerTopic" + "/" + "8.13")));
+            Assertions
+                    .assertTrue(fs.exists(new Path(hdfsConfig.hdfsPath() + "/" + "testConsumerTopic" + "/" + "9.13")));
 
-            // Assert the avro-files that were too small to be stored in HDFS.
-            String path1 = config.queueDirectory() + "/" + "testConsumerTopic0.1";
-            File avroFile1 = new File(path1);
-            Assertions.assertFalse(avroFile1.exists()); // Partition 0 avro-file shouldn't exist because there are no records left in the buffer.
-
-            List<String> filenameList = new ArrayList<>();
-            for (int i = 1; i <= 9; i++) {
-                filenameList.add("testConsumerTopic" + i + "." + 1);
-            }
-            for (String fileName : filenameList) {
-                String path2 = config.queueDirectory() + "/" + fileName;
-                File avroFile = new File(path2);
-                Assertions.assertTrue(filenameList.contains(avroFile.getName()));
-                DatumReader<SyslogRecord> datumReader = new SpecificDatumReader<>(SyslogRecord.class);
-                DataFileReader<SyslogRecord> reader = new DataFileReader<>(avroFile, datumReader);
-                for (int i = 0; i <= 13; i++) {
+            // Assert that the expected records are present in hdfs files
+            for (int i = 0; i <= 9; i++) {
+                Path hdfsreadpath = new Path(hdfsConfig.hdfsPath() + "/" + "testConsumerTopic" + "/" + i + ".13");
+                //Init input stream
+                FSDataInputStream inputStream = fs.open(hdfsreadpath);
+                //The data is in AVRO-format, so it can't be read as a string.
+                DataFileStream<SyslogRecord> reader = new DataFileStream<>(
+                        inputStream,
+                        new SpecificDatumReader<>(SyslogRecord.class)
+                );
+                for (int j = 0; j <= 13; j++) {
                     Assertions.assertTrue(reader.hasNext());
-                    SyslogRecord record = reader.next();
-                    Assertions.assertEquals(i, record.getOffset());
+                    SyslogRecord syslogRecord = reader.next();
+                    Assertions.assertEquals(j, syslogRecord.getOffset());
                 }
                 Assertions.assertFalse(reader.hasNext());
-                reader.close();
-                avroFile.delete();
             }
 
+            // Assert that all the temporary AVRO-files generated by PartitionFile objects during consumption were deleted to prepare for new records.
+            File queueDirectory = new File(config.queueDirectory());
+            File[] files = queueDirectory.listFiles();
+            Assertions.assertEquals(0, files.length);
         });
     }
 }

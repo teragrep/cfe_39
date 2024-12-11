@@ -43,46 +43,35 @@
  * Teragrep, the applicable Commercial License may apply to this file if you as
  * a licensee so wish it.
  */
-package com.teragrep.cfe_39;
+package com.teragrep.cfe_39.consumers.kafka;
 
-import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.Test;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import com.teragrep.cfe_39.configuration.CommonConfiguration;
+import com.teragrep.cfe_39.configuration.HdfsConfiguration;
+import com.teragrep.cfe_39.consumers.kafka.queue.UniqueFileCreated;
+import org.apache.kafka.common.TopicPartition;
 
-import java.util.Properties;
+import java.io.IOException;
 
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+public final class PartitionFileFactory {
 
-public class ConfigTest {
+    private final CommonConfiguration config;
+    private final HdfsConfiguration hdfsConfig;
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(ConfigTest.class);
-
-    @Test
-    public void validConfigTest() {
-        assertDoesNotThrow(() -> {
-            // Set system properties to use the valid configuration.
-            System
-                    .setProperty("cfe_39.config.location", System.getProperty("user.dir") + "/src/test/resources/valid.application.properties");
-            Config config = new Config();
-            Properties readerKafkaProperties = config.getKafkaConsumerProperties();
-            // Test extracting useMockKafkaConsumer value from config.
-            boolean useMockKafkaConsumer = Boolean
-                    .parseBoolean(readerKafkaProperties.getProperty("useMockKafkaConsumer", "false"));
-            Assertions.assertTrue(useMockKafkaConsumer);
-            LOGGER.debug("useMockKafkaConsumer: {}", useMockKafkaConsumer);
-        });
+    PartitionFileFactory(CommonConfiguration config, HdfsConfiguration hdfsConfig) {
+        this.config = config;
+        this.hdfsConfig = hdfsConfig;
     }
 
-    @Test
-    public void brokenConfigTest() {
-        // Set system properties to use the broken configuration.
-        System
-                .setProperty("cfe_39.config.location", System.getProperty("user.dir") + "/src/test/resources/broken.application.properties");
-        // Test if the broken configuration throws the expected exception.
-        Exception e = Assertions.assertThrows(Exception.class, () -> {
-            Config config = new Config();
-        });
-        Assertions.assertEquals("hdfsuri not set", e.getMessage());
+    public PartitionFileImpl partitionFor(TopicPartition topicPartition) throws IOException {
+        UniqueFileCreated uniqueFileCreated = new UniqueFileCreated(
+                config.queueDirectory(),
+                topicPartition.topic() + topicPartition.partition()
+        );
+        return new PartitionFileImpl(
+                uniqueFileCreated.getNextWritableFile(),
+                hdfsConfig,
+                topicPartition,
+                new PartitionRecordsImpl(config)
+        );
     }
 }

@@ -45,6 +45,7 @@
  */
 package com.teragrep.cfe_39;
 
+import com.teragrep.cfe_39.configuration.HdfsConfiguration;
 import com.teragrep.cfe_39.consumers.kafka.HDFSPrune;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.FileUtil;
@@ -59,6 +60,8 @@ import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.nio.file.Files;
+import java.util.HashMap;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 
@@ -67,21 +70,34 @@ public class PruningNoFilesTest {
     private static final Logger LOGGER = LoggerFactory.getLogger(PruningNoFilesTest.class);
     private static MiniDFSCluster hdfsCluster;
     private static File baseDir;
-    private static Config config;
+    private static HdfsConfiguration hdfsConfig;
     private FileSystem fs;
 
     // Start minicluster and initialize config.
     @BeforeEach
     public void startMiniCluster() {
         assertDoesNotThrow(() -> {
-            // Set system properties to use the valid configuration.
-            System
-                    .setProperty("cfe_39.config.location", System.getProperty("user.dir") + "/src/test/resources/valid.application.properties");
-            config = new Config();
             // Create a HDFS miniCluster
             baseDir = Files.createTempDirectory("test_hdfs").toFile().getAbsoluteFile();
-            hdfsCluster = new TestMiniClusterFactory().create(config, baseDir);
-            fs = new TestFileSystemFactory().create(config.getHdfsuri());
+            hdfsCluster = new TestMiniClusterFactory().create(baseDir);
+            Map<String, String> hdfsMap = new HashMap<>();
+            hdfsMap.put("pruneOffset", "157784760000");
+            hdfsMap.put("hdfsuri", "hdfs://localhost:" + hdfsCluster.getNameNodePort() + "/");
+            hdfsMap.put("hdfsPath", "hdfs:///opt/teragrep/cfe_39/srv/");
+            hdfsMap.put("java.security.krb5.kdc", "test");
+            hdfsMap.put("java.security.krb5.realm", "test");
+            hdfsMap.put("hadoop.security.authentication", "false");
+            hdfsMap.put("hadoop.security.authorization", "test");
+            hdfsMap.put("dfs.namenode.kerberos.principal.pattern", "test");
+            hdfsMap.put("KerberosKeytabUser", "test");
+            hdfsMap.put("KerberosKeytabPath", "test");
+            hdfsMap.put("dfs.client.use.datanode.hostname", "false");
+            hdfsMap.put("hadoop.kerberos.keytab.login.autorenewal.enabled", "true");
+            hdfsMap.put("dfs.data.transfer.protection", "test");
+            hdfsMap.put("dfs.encrypt.data.transfer.cipher.suites", "test");
+            hdfsMap.put("maximumFileSize", "3000");
+            hdfsConfig = new HdfsConfiguration(hdfsMap);
+            fs = new TestFileSystemFactory().create(hdfsConfig.hdfsUri());
         });
 
     }
@@ -98,15 +114,15 @@ public class PruningNoFilesTest {
     public void noFiles() {
         // This test case is for testing the functionality of the HDFSPrune.java when the target database is empty.
         assertDoesNotThrow(() -> {
-            Assertions.assertFalse(fs.exists(new Path(config.getHdfsPath() + "/" + "testConsumerTopic")));
-            HDFSPrune hdfsPrune = new HDFSPrune(config, "testConsumerTopic", fs);
-            Assertions.assertTrue(fs.exists(new Path(config.getHdfsPath() + "/" + "testConsumerTopic")));
+            Assertions.assertFalse(fs.exists(new Path(hdfsConfig.hdfsPath() + "/" + "testConsumerTopic")));
+            HDFSPrune hdfsPrune = new HDFSPrune(hdfsConfig, "testConsumerTopic", fs);
+            Assertions.assertTrue(fs.exists(new Path(hdfsConfig.hdfsPath() + "/" + "testConsumerTopic")));
             Assertions
-                    .assertEquals(0, fs.listStatus(new Path(config.getHdfsPath() + "/" + "testConsumerTopic")).length);
+                    .assertEquals(0, fs.listStatus(new Path(hdfsConfig.hdfsPath() + "/" + "testConsumerTopic")).length);
             int deleted = hdfsPrune.prune();
             Assertions.assertEquals(0, deleted);
             Assertions
-                    .assertEquals(0, fs.listStatus(new Path(config.getHdfsPath() + "/" + "testConsumerTopic")).length);
+                    .assertEquals(0, fs.listStatus(new Path(hdfsConfig.hdfsPath() + "/" + "testConsumerTopic")).length);
         });
     }
 }
